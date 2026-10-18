@@ -10,14 +10,16 @@ import {addLandscapeDetails} from './landscapeModels';
 import {addConstructionSites} from './constructionModels';
 import {GROUND_TOP,BOARD_DEPTH} from './mapLevels';
 import {assetUrl} from './assetUrl';
+import {measure,placementKey} from './spatial';
+import type {World,Placement} from './spatial';
 
-type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void};
+type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void;spatial?:{world:World;placements:Placement[]};onPickSpatial?:(cellId:string,projectId:ProjectId)=>void};
 type MapController={zoom:(factor:number)=>void;reset:()=>void;top:()=>void;focusBuilding:(id:string)=>void;focusTour:(id:string)=>void};
 
-export default function CampusMap({config,selected,focused,event,onFocus,onSources,onClearFocus}:MapProps){
+export default function CampusMap({config,selected,focused,event,onFocus,onSources,onClearFocus,spatial,onPickSpatial}:MapProps){
   const container=useRef<HTMLDivElement>(null),labelLayer=useRef<HTMLDivElement>(null);
   const controlsRef=useRef<MapController|null>(null);
-  const stateRef=useRef({selected,focused,event,onFocus,onClearFocus});stateRef.current={selected,focused,event,onFocus,onClearFocus};
+  const stateRef=useRef({selected,focused,event,onFocus,onClearFocus,spatial});stateRef.current={selected,focused,event,onFocus,onClearFocus,spatial};
   const [failed,setFailed]=useState(false),[flat,setFlat]=useState(false),[hover,setHover]=useState('');
   const [expanded,setExpanded]=useState(false),[showLabels,setShowLabels]=useState(true);
   const [tour,setTour]=useState(''),[inspected,setInspected]=useState<Building|null>(null);
@@ -82,6 +84,8 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
     renderer.domElement.dataset.groundLevel=String(GROUND_TOP);
     const {lampMaterial}=addLandscapeDetails(scene,config);
     addConstructionSites(scene,config);
+    const spatialMarkers=new THREE.Group();scene.add(spatialMarkers);
+    const clearSpatialMarkers=()=>{spatialMarkers.children.forEach(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();(o.material as THREE.Material).dispose();}});spatialMarkers.clear();};
     const rings=new Map<ProjectId,THREE.Mesh>();
     projects.forEach(p=>{const m=new THREE.Mesh(new THREE.RingGeometry(2.6,2.85,64),new THREE.MeshBasicMaterial({color:0x237654,transparent:true,opacity:.85,side:THREE.DoubleSide}));m.rotation.x=-Math.PI/2;m.position.set(p.location[0],.27,p.location[1]);m.visible=false;scene.add(m);rings.set(p.id,m);});
     const shuttlePaths=campus.roads.filter(r=>config.shuttleRoadNames.includes(r.name)).map(r=>{const path=ribbon(r.points,.6,0x33886a,.26);path.visible=false;return path;});
@@ -117,8 +121,10 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
     let frame=0,lastKey='';const vector=new THREE.Vector3(),north=new THREE.Vector3(),origin=new THREE.Vector3();
     const animate=()=>{
       frame=requestAnimationFrame(animate);controls.update();
-      const {selected,focused,event}=stateRef.current,key=selected.join(',')+'|'+focused+'|'+event;
+      const {selected,focused,event,spatial}=stateRef.current,key=selected.join(',')+'|'+focused+'|'+event+'|'+(spatial?.placements.map(placementKey).join(',')||'');
       if(key!==lastKey){
+        clearSpatialMarkers();
+        spatial?.placements.forEach(p=>{const c=spatial.world.byId.get(p.cellId)!;const ring=new THREE.Mesh(new THREE.RingGeometry(1.5,1.9,32),new THREE.MeshBasicMaterial({color:measure(p.projectId).color,side:THREE.DoubleSide,depthTest:false}));ring.rotation.x=-Math.PI/2;ring.position.set(c.x,.3,c.z);ring.renderOrder=4;spatialMarkers.add(ring);});
         lastKey=key;buildings.forEach(mesh=>{const p=projects.find(p=>p.buildingIds.includes(mesh.userData.id));const active=p&&selected.includes(p.id);(mesh.userData.wall as THREE.MeshStandardMaterial).color.set(active?0x94b89c:mesh.userData.baseColor);});
         rings.forEach((ring,id)=>{ring.visible=selected.includes(id)||id===focused;(ring.material as THREE.MeshBasicMaterial).color.set(selected.includes(id)?0x237654:0xd4aa41);});
         shuttlePaths.forEach(p=>p.visible=selected.includes('shuttle'));walkPaths.forEach(p=>p.visible=selected.includes('walk'));
@@ -154,7 +160,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
     <div className="three-host" ref={container}/>
     <div className="map-explore"><ScanSearch size={14}/><select aria-label="地标近景" value={tour} onChange={e=>{if(e.target.value)controlsRef.current?.focusTour(e.target.value);else controlsRef.current?.reset();}}><option value="">地标近景</option>{config.tours.map(t=><option key={t.id||t.buildingId} value={t.id||t.buildingId}>{t.name}</option>)}</select><button onClick={()=>setShowLabels(v=>!v)} aria-label={showLabels?'隐藏地图标记':'显示地图标记'} title={showLabels?'隐藏地图标记':'显示地图标记'}>{showLabels?<Eye size={15}/>:<EyeOff size={15}/>}</button><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'退出大图':'展开大图'} title={expanded?'退出大图':'展开大图'}>{expanded?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button></div>
     {failed?<div className="map-fallback"><img src={config.previewImage} alt={`西北工业大学${config.name}官方地图`}/><p>当前设备无法显示三维地图，措施选择仍可使用。</p></div>:<div className={`map-labels ${showLabels?'':'labels-hidden'}`} ref={labelLayer}>
-      {config.projects.map((p,i)=><button key={p.id} data-map-x={p.location[0]} data-map-z={p.location[1]} data-map-y={p.id==='retrofit'?6:4} className={`map-pin ${selected.includes(p.id)?'selected':''} ${focused===p.id?'focused':''}`} onClick={()=>{setInspected(null);onFocus(p.id);}} aria-label={`查看${p.name}：${p.site}`}><span>{selected.includes(p.id)?'✓':String(i+1).padStart(2,'0')}</span><em>{p.short}</em></button>)}
+      {spatial?spatial.placements.map(p=>{const c=spatial.world.byId.get(p.cellId)!;return <button key={placementKey(p)} data-map-x={c.x} data-map-z={c.z} data-map-y={Math.max(4,c.height+1)} className="map-pin selected" onClick={()=>onPickSpatial?.(c.id,p.projectId)} aria-label={`${measure(p.projectId).name} ${c.id}`}><span>{measure(p.projectId).symbol}</span><em>{measure(p.projectId).name}</em></button>;}):config.projects.map((p,i)=><button key={p.id} data-map-x={p.location[0]} data-map-z={p.location[1]} data-map-y={p.id==='retrofit'?6:4} className={`map-pin ${selected.includes(p.id)?'selected':''} ${focused===p.id?'focused':''}`} onClick={()=>{setInspected(null);onFocus(p.id);}} aria-label={`查看${p.name}：${p.site}`}><span>{selected.includes(p.id)?'✓':String(i+1).padStart(2,'0')}</span><em>{p.short}</em></button>)}
       {config.landmarks.map(l=><span key={l.name} className={`landmark-label ${l.water?'water-label':''}`} data-map-x={l.location[0]} data-map-z={l.location[1]} data-map-y={l.height||1}>{l.name}</span>)}
     </div>}
     <div className="map-tools"><button onClick={()=>controlsRef.current?.zoom(1.35)} aria-label="放大地图"><Plus size={17}/></button><button onClick={()=>controlsRef.current?.zoom(1/1.35)} aria-label="缩小地图"><Minus size={17}/></button><span/><button onClick={()=>{if(flat)controlsRef.current?.reset();else controlsRef.current?.top();}} aria-label={flat?'切换立体地图':'切换俯视地图'}><Layers size={17}/></button><button onClick={()=>controlsRef.current?.reset()} aria-label="重置地图视角"><RotateCcw size={16}/></button></div>
