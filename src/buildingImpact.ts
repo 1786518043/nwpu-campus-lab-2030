@@ -16,7 +16,7 @@ export type ActionImpact={
 };
 const EPS=.005;
 const exposureCache=new WeakMap<BuildingContext,Map<string,string[]>>();
-function exposure(context:BuildingContext,site:BuildingSite){
+export function buildingExposure(context:BuildingContext,site:BuildingSite){
   let cached=exposureCache.get(context);if(!cached){cached=new Map();exposureCache.set(context,cached);}
   if(!cached.has(site.id)){
     const ids=new Set(site.footprint.map(f=>f.cellId));
@@ -59,7 +59,7 @@ export function evaluateActionImpact(context:BuildingContext,actions:BuildingAct
   // happens to share a computation cell. Legacy actions retain their old scope.
   const candidates=roof&&!action.legacyCells?[context.byId.get(action.buildingId)!]:context.sites;
   for(const site of candidates){
-    const ids=exposure(context,site),weight=ids.reduce((sum,id)=>sum+context.world.byId.get(id)!.demand,0)||1;
+    const ids=buildingExposure(context,site),weight=ids.reduce((sum,id)=>sum+context.world.byId.get(id)!.demand,0)||1;
     const avg=(key:keyof Pick<CellResult,'heat'|'runoff'|'access'|'comfort'|'noise'|'ecology'|'light'|'synergy'>)=>ids.reduce((sum,id)=>sum+(newCells.get(id)![key]-oldCells.get(id)![key])*context.world.byId.get(id)!.demand,0)/weight;
     const positive:ImpactEffect[]=[],negative:ImpactEffect[]=[];
     const add=(key:string,label:string,value:number,lower=false,unit?:string)=>{if(Math.abs(value)<EPS)return;(value*(lower?-1:1)>0?positive:negative).push({key,label,value,unit});};

@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import type {BuildingContext} from './buildingPlanning';
 import type {ActionImpact,ImpactKind} from './buildingImpact';
+import type {ComparisonDisplay,ComparisonKind} from './buildingComparison';
 import {CELL_SIZE} from './spatial';
 import {shapeOf} from './mapGeometry';
 import {BUILDING_BASE} from './mapLevels';
 
 export const IMPACT_COLORS:Record<ImpactKind,number>={positive:0x218b64,negative:0xc44f58,mixed:0xc18323};
+export const COMPARISON_COLORS:Record<ComparisonKind,number>={...IMPACT_COLORS,neutral:0x84918a};
 export function clearImpactOverlay(group:THREE.Group){
   group.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Line){o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose());}});group.clear();
 }
@@ -28,20 +30,35 @@ export function drawImpactOverlay(group:THREE.Group,context:BuildingContext,impa
     const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineDashedMaterial({color:range.potential?0x85948a:0x3b8f9b,transparent:true,opacity:range.potential?.55:.8,dashSize:.7,gapSize:.4,depthWrite:false,depthTest:false}));line.computeLineDistances();line.renderOrder=4;line.userData.kind=range.potential?'potential-range':'range-boundary';group.add(line);
     const anchor=new THREE.Mesh(new THREE.RingGeometry(.27,.43,32),new THREE.MeshBasicMaterial({color:0x327e93,side:THREE.DoubleSide,depthTest:false}));anchor.rotation.x=-Math.PI/2;anchor.position.set(c.x,.28,c.z);anchor.renderOrder=5;group.add(anchor);
   }
-  for(const affected of impact.buildings){
-    const site=context.byId.get(affected.buildingId)!;
-    for(const building of site.buildings)for(const part of building.parts||[building]){
-      for(const boundary of [part.points,...(part.holes||[])]){
-        const points=boundary.map(p=>new THREE.Vector3(p[0],BUILDING_BASE+part.height+.26,p[1]));
-        const outline=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:IMPACT_COLORS[affected.kind],transparent:true,opacity:.95,depthTest:false}));outline.renderOrder=6;outline.userData.buildingId=site.id;outline.userData.impact=affected.kind;group.add(outline);
-      }
-      // Sparse vertical accents expose the effect even on a low camera angle.
-      const edges=part.points.filter((_,i)=>i%Math.max(1,Math.ceil(part.points.length/6))===0).flatMap(p=>[new THREE.Vector3(p[0],.2,p[1]),new THREE.Vector3(p[0],part.height+.24,p[1])]);
-      const verticals=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edges),new THREE.LineBasicMaterial({color:IMPACT_COLORS[affected.kind],transparent:true,opacity:.5,depthWrite:false}));group.add(verticals);
-    }
-  }
+  drawBuildingOutlines(group,context,impact.buildings);
   for(const route of impact.routes){
     const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(route.map(id=>{const c=context.world.byId.get(id)!;return new THREE.Vector3(c.x,.38,c.z);})),new THREE.LineDashedMaterial({color:0x2c8d9e,dashSize:.55,gapSize:.25,depthTest:false}));line.computeLineDistances();line.renderOrder=4;line.userData.kind='preview-route';group.add(line);
   }
   group.userData.source=impact.action.buildingId;
+}
+function drawBuildingOutlines(group:THREE.Group,context:BuildingContext,buildings:{buildingId:string;kind:ComparisonKind}[]){
+  for(const affected of buildings){
+    const site=context.byId.get(affected.buildingId)!;
+    for(const building of site.buildings)for(const part of building.parts||[building]){
+      for(const boundary of [part.points,...(part.holes||[])]){
+        const points=boundary.map(p=>new THREE.Vector3(p[0],BUILDING_BASE+part.height+.26,p[1]));
+        const outline=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:COMPARISON_COLORS[affected.kind],transparent:true,opacity:.95,depthTest:false}));outline.renderOrder=6;outline.userData.buildingId=site.id;outline.userData.impact=affected.kind;group.add(outline);
+      }
+      // Sparse vertical accents expose the effect even on a low camera angle.
+      const edges=part.points.filter((_,i)=>i%Math.max(1,Math.ceil(part.points.length/6))===0).flatMap(p=>[new THREE.Vector3(p[0],.2,p[1]),new THREE.Vector3(p[0],part.height+.24,p[1])]);
+      const verticals=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edges),new THREE.LineBasicMaterial({color:COMPARISON_COLORS[affected.kind],transparent:true,opacity:.5,depthWrite:false}));group.add(verticals);
+    }
+  }
+}
+export function drawComparisonOverlay(group:THREE.Group,context:BuildingContext,buildings:ComparisonDisplay[]){
+  clearImpactOverlay(group);drawBuildingOutlines(group,context,buildings);
+  const max=Math.max(1,...buildings.map(b=>b.score));
+  for(const affected of buildings){
+    if(affected.kind==='neutral')continue;
+    for(const b of context.byId.get(affected.buildingId)!.buildings)for(const part of b.parts||[b]){
+      const roof=new THREE.Mesh(new THREE.ShapeGeometry(shapeOf(part.points,part.holes)),new THREE.MeshBasicMaterial({color:COMPARISON_COLORS[affected.kind],transparent:true,opacity:.07+.1*affected.score/max,depthWrite:false,side:THREE.DoubleSide}));
+      roof.rotation.x=-Math.PI/2;roof.position.y=BUILDING_BASE+part.height+.2;roof.renderOrder=3;roof.userData.kind='comparison-roof';roof.userData.buildingId=affected.buildingId;group.add(roof);
+    }
+  }
+  group.userData.mode='comparison';
 }
