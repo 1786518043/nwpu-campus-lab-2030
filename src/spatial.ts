@@ -5,6 +5,9 @@ import {boundsOf,pointInside,distanceToSegment} from './mapGeometry';
 
 export const SPATIAL_VERSION='spatial-grid-40m-v1';
 export const CELL_SIZE=4; // The supplied map projection uses approximately 10 m per scene unit.
+// Shared by the calculation and its continuous, non-grid visual explanation.
+export const FIELD_RADIUS={garden:3,walk:2,shuttle:2.5,feeder:1.5,lighting:2} as const;
+export type InfluenceField={kind:keyof typeof FIELD_RADIUS;cellId:string;radius:number;strength:number};
 export type Placement={projectId:ProjectId;cellId:string};
 export type Cell={
   id:string;row:number;col:number;x:number;z:number;name:string;
@@ -111,7 +114,7 @@ function roadPath(world:World,from:string,to:string):string[]|null {
   }return null;
 }
 export type Interaction={kind:'positive'|'negative'|'note';name:string;detail:string;cells:string[]};
-export type CellResult={cellId:string;energy:number;heat:number;runoff:number;access:number;comfort:number;initialComfort:number;noise:number;ecology:number;served:boolean};
+export type CellResult={cellId:string;energy:number;heat:number;runoff:number;access:number;comfort:number;initialComfort:number;noise:number;ecology:number;light:number;synergy:number;served:boolean};
 export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId,buildingInput?:{energySavings:Record<string,number>;cost:number;problems:string[]}){
   const placements=[...input].sort((a,b)=>placementKey(a).localeCompare(placementKey(b)));
   const problems:string[]=[...(buildingInput?.problems||[])];const seen=new Set<string>();
@@ -149,9 +152,9 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
   let totalEnergy=0,totalComfort=0,totalHeat=0,totalRunoff=0,totalEcology=0,totalServed=0,baseComfort=0;
   let baselineHeat=0,baselineRunoff=0;
   const cells:CellResult[]=world.cells.map(c=>{
-    const garden=maxField(c,groups.garden,3),walk=maxField(c,groups.walk,2,p=>connectedWalk.has(p.id)?1:.55);
-    const stop=maxField(c,groups.shuttle.filter(s=>activeStops.has(s.id)),2.5),firstMile=maxField(c,groups.walk.filter(w=>feeder.has(w.id)),1.5)*.75;
-    const transit=Math.max(stop,firstMile),light=maxField(c,groups.lighting,2);
+    const garden=maxField(c,groups.garden,FIELD_RADIUS.garden),walk=maxField(c,groups.walk,FIELD_RADIUS.walk,p=>connectedWalk.has(p.id)?1:.55);
+    const stop=maxField(c,groups.shuttle.filter(s=>activeStops.has(s.id)),FIELD_RADIUS.shuttle),firstMile=maxField(c,groups.walk.filter(w=>feeder.has(w.id)),FIELD_RADIUS.feeder)*.75;
+    const transit=Math.max(stop,firstMile),light=maxField(c,groups.lighting,FIELD_RADIUS.lighting);
     const noise=maxField(c,groups.shuttle.filter(s=>activeStops.has(s.id)),2)*c.dorm;
     const ecology=light*clamp(c.green+c.water+garden*.4)*.55;
     const initialHeat=clamp(c.heat+(event==='heat'?.22:0)),initialRunoff=clamp(c.runoff+(event==='rain'?.32:0));
@@ -164,11 +167,12 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
     energy=Math.max(0,energy-c.demand*(walk*.09+transit*.18)*(1-walk*transit*.3));
     energy+=light*.012;
     const initialComfort=50-(event==='heat'?initialHeat*11:0)-(event==='rain'?initialRunoff*13:0);
-    const comfort=clamp(initialComfort+(initialHeat-heat)*22+(initialRunoff-runoff)*15+access*12+light*5+garden*walk*(event==='heat'?9:4)-noise*10-ecology*5,0,100);
+    const synergy=garden*walk*(event==='heat'?9:4);
+    const comfort=clamp(initialComfort+(initialHeat-heat)*22+(initialRunoff-runoff)*15+access*12+light*5+synergy-noise*10-ecology*5,0,100);
     const served=comfort-initialComfort>=1||energy<c.energy*energyMultiplier*.92;
     totalEnergy+=energy;totalComfort+=comfort*c.demand;baseComfort+=initialComfort*c.demand;totalHeat+=heat*c.demand;totalRunoff+=runoff*c.demand;totalEcology+=ecology*c.demand;
     baselineHeat+=initialHeat*c.demand;baselineRunoff+=initialRunoff*c.demand;if(served)totalServed+=c.demand;
-    return {cellId:c.id,energy,heat,runoff,access,comfort,initialComfort,noise,ecology,served};
+    return {cellId:c.id,energy,heat,runoff,access,comfort,initialComfort,noise,ecology,light,synergy,served};
   });
   // Each connected service consumes energy even when its demand is low.
   const routeEnergy=routes.reduce((s,path)=>s+.45+path.length*.018,0);totalEnergy+=routeEnergy;
@@ -177,7 +181,14 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
   const cost=buildingInput?.cost??placements.reduce((n,p)=>n+placementCost(world,p),0),budget=EVENTS.find(e=>e.id===event)!.budget;
   const carbon=round(totalEnergy/baselineEnergy*100),baselineCarbon=round(energyMultiplier*100),comfort=round(totalComfort/weight),baselineComfort=round(baseComfort/weight),coverage=round(totalServed/weight*100);
   const reduction=round((1-carbon/baselineCarbon)*100),comfortGain=round(comfort-baselineComfort),feasible=!problems.length&&cost<=budget;
-  return {cost,budget,remaining:budget-cost,carbon,comfort,coverage,reduction,comfortGain,baselineCarbon,baselineComfort,heat:round(totalHeat/weight*100),runoff:round(totalRunoff/weight*100),baselineHeat:round(baselineHeat/weight*100),baselineRunoff:round(baselineRunoff/weight*100),ecology:round(totalEcology/weight*100),routeEnergy:round(routeEnergy),feasible,problems,success:feasible&&reduction>=2&&comfortGain>=1&&coverage>=12,cells,interactions,routes};
+  const fields:InfluenceField[]=[
+    ...groups.garden.map(c=>({kind:'garden' as const,cellId:c.id,radius:FIELD_RADIUS.garden,strength:1})),
+    ...groups.walk.map(c=>({kind:'walk' as const,cellId:c.id,radius:FIELD_RADIUS.walk,strength:connectedWalk.has(c.id)?1:.55})),
+    ...[...activeStops].map(cellId=>({kind:'shuttle' as const,cellId,radius:FIELD_RADIUS.shuttle,strength:1})),
+    ...[...feeder].map(cellId=>({kind:'feeder' as const,cellId,radius:FIELD_RADIUS.feeder,strength:.75})),
+    ...groups.lighting.map(c=>({kind:'lighting' as const,cellId:c.id,radius:FIELD_RADIUS.lighting,strength:1})),
+  ];
+  return {cost,budget,remaining:budget-cost,carbon,comfort,coverage,reduction,comfortGain,baselineCarbon,baselineComfort,heat:round(totalHeat/weight*100),runoff:round(totalRunoff/weight*100),baselineHeat:round(baselineHeat/weight*100),baselineRunoff:round(baselineRunoff/weight*100),ecology:round(totalEcology/weight*100),routeEnergy:round(routeEnergy),feasible,problems,success:feasible&&reduction>=2&&comfortGain>=1&&coverage>=12,cells,interactions,routes,fields};
 }
 export type SpatialResult=ReturnType<typeof evaluateSpatial>;
 export type SpatialState={version:2;gridVersion:string;campusId:CampusId;placements:Placement[];event:EventId;snapshot:{placements:Placement[];savedAt:string}|null;migrated?:boolean};

@@ -15,14 +15,20 @@ import type {SpatialResult} from './spatial';
 import {actionKey} from './buildingPlanning';
 import type {BuildingContext,BuildingAction} from './buildingPlanning';
 import {drawBuildingInterventions} from './buildingInterventions';
+import type {ActionImpact} from './buildingImpact';
+import {impactKindName,impactNumber} from './buildingImpact';
+import {drawImpactOverlay} from './impactOverlay';
+import {ImpactEffects} from './ImpactSummary';
+import {CELL_SIZE} from './spatial';
 
-type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void;planning?:{context:BuildingContext;actions:BuildingAction[];result:SpatialResult;selectedId:string|null;focusRequest:number;onSelect:(buildingId:string)=>void}};
-type MapController={zoom:(factor:number)=>void;reset:()=>void;top:()=>void;focusBuilding:(id:string)=>void;focusTour:(id:string)=>void};
+type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void;planning?:{context:BuildingContext;actions:BuildingAction[];result:SpatialResult;selectedId:string|null;focusRequest:number;onSelect:(buildingId:string)=>void;impact:ActionImpact|null;impactInspection:{id:string;serial:number}|null}};
+type MapController={zoom:(factor:number)=>void;reset:()=>void;top:()=>void;focusBuilding:(id:string)=>void;focusTour:(id:string)=>void;focusImpact:()=>void};
 
 export default function CampusMap({config,selected,focused,event,onFocus,onSources,onClearFocus,planning}:MapProps){
   const container=useRef<HTMLDivElement>(null),labelLayer=useRef<HTMLDivElement>(null);
   const controlsRef=useRef<MapController|null>(null);
-  const stateRef=useRef({selected,focused,event,onFocus,onClearFocus,planning});stateRef.current={selected,focused,event,onFocus,onClearFocus,planning};
+  const [showImpact,setShowImpact]=useState(true),[inspectedImpact,setInspectedImpact]=useState<string|null>(null);
+  const stateRef=useRef({selected,focused,event,onFocus,onClearFocus,planning,showImpact});stateRef.current={selected,focused,event,onFocus,onClearFocus,planning,showImpact};
   const [failed,setFailed]=useState(false),[flat,setFlat]=useState(false),[hover,setHover]=useState('');
   const [expanded,setExpanded]=useState(false),[showLabels,setShowLabels]=useState(true);
   const [tour,setTour]=useState(''),[inspected,setInspected]=useState<Building|null>(null);
@@ -87,7 +93,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
     renderer.domElement.dataset.groundLevel=String(GROUND_TOP);
     const {lampMaterial}=addLandscapeDetails(scene,config);
     addConstructionSites(scene,config);
-    const spatialMarkers=new THREE.Group();scene.add(spatialMarkers);
+    const spatialMarkers=new THREE.Group(),impactMarkers=new THREE.Group();scene.add(spatialMarkers,impactMarkers);
     const rings=new Map<ProjectId,THREE.Mesh>();
     projects.forEach(p=>{const m=new THREE.Mesh(new THREE.RingGeometry(2.6,2.85,64),new THREE.MeshBasicMaterial({color:0x237654,transparent:true,opacity:.85,side:THREE.DoubleSide}));m.rotation.x=-Math.PI/2;m.position.set(p.location[0],.27,p.location[1]);m.visible=false;scene.add(m);rings.set(p.id,m);});
     const shuttlePaths=campus.roads.filter(r=>config.shuttleRoadNames.includes(r.name)).map(r=>{const path=ribbon(r.points,.6,0x33886a,.26);path.visible=false;return path;});
@@ -119,12 +125,22 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
         const t=config.tours.find(t=>(t.id||t.buildingId)===id);if(!t)return;
         if(t.buildingId){controlsRef.current?.focusBuilding(t.buildingId);stateRef.current.planning?.onSelect(t.buildingId);return;}
         if(t.location){closeup(t.location[0],t.location[1],t.span||35);setInspected(null);setTour(id);}
+      },
+      focusImpact:()=>{
+        const p=stateRef.current.planning;if(!p?.impact)return;
+        const source=p.context.byId.get(p.impact.action.buildingId)!;
+        const points=source.buildings.flatMap(b=>b.points);
+        for(const range of p.impact.ranges){const c=p.context.world.byId.get(range.cellId)!;const r=range.radius*CELL_SIZE;points.push([c.x-r,c.z-r],[c.x+r,c.z+r]);}
+        for(const effect of p.impact.buildings)points.push(...p.context.byId.get(effect.buildingId)!.buildings.flatMap(b=>b.points));
+        const box=boundsOf(points);closeup(box.cx,box.cz,Math.max(box.width,box.depth,12),source.height);setInspected(null);
       }
     };
-    let frame=0,lastKey='';const vector=new THREE.Vector3(),north=new THREE.Vector3(),origin=new THREE.Vector3();
+    let frame=0,lastKey='',lastImpact:ActionImpact|null|undefined;const vector=new THREE.Vector3(),north=new THREE.Vector3(),origin=new THREE.Vector3();
     const animate=()=>{
       frame=requestAnimationFrame(animate);controls.update();
       const {selected,focused,event,planning}=stateRef.current,key=selected.join(',')+'|'+focused+'|'+event+'|'+planning?.selectedId+'|'+(planning?.actions.map(a=>actionKey(a)+(a.legacyCells?.join(',')||'')).join(',')||'');
+      const impact=stateRef.current.showImpact?planning?.impact:null;
+      if(impact!==lastImpact){lastImpact=impact;drawImpactOverlay(impactMarkers,planning?.context!,impact||null);renderer.domElement.dataset.impactBuildings=String(impact?.buildings.length||0);renderer.domElement.dataset.impactRanges=String(impact?.ranges.length||0);}
       if(key!==lastKey){
         if(planning)drawBuildingInterventions(spatialMarkers,planning.context,planning.actions,planning.selectedId,planning.result);
         lastKey=key;buildings.forEach(mesh=>{const site=planning?.context.byBuildingId.get(mesh.userData.id),p=projects.find(p=>p.buildingIds.includes(mesh.userData.id));const active=planning?planning.actions.some(a=>a.buildingId===site?.id&&a.projectId==='retrofit'):p&&selected.includes(p.id);const wall=mesh.userData.wall as THREE.MeshStandardMaterial;wall.color.set(active?0x94b89c:mesh.userData.baseColor);wall.emissive.set(site&&site.id===planning?.selectedId?0x493c18:0x000000);wall.emissiveIntensity=.18;});
@@ -141,7 +157,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
         vector.set(Number(label.dataset.mapX),Number(label.dataset.mapY||4),Number(label.dataset.mapZ)).project(camera);
         const x=(vector.x+1)*rect.width/2,y=(-vector.y+1)*rect.height/2;
         label.style.transform=`translate(${x}px,${y}px) translate(-50%,-100%)`;
-        const outside=x<20||x>rect.width-20||y<100||y>rect.height-42;
+        const outside=x<20||x>rect.width-20||y<(impact?190:100)||y>rect.height-42;
         label.classList.remove('compact-label');let w=label.offsetWidth;const h=label.offsetHeight;
         const overlaps=occupied.some(o=>Math.abs(x-o.x)<(w+o.w)/2+5&&Math.abs(y-o.y)<Math.max(h,o.h)+3);
         if(overlaps&&label.classList.contains('map-pin')&&!label.classList.contains('focused')){label.classList.add('compact-label');w=28;}
@@ -159,17 +175,30 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
   },[config]);
   useEffect(()=>{if(planning?.selectedId){const site=planning.context.byId.get(planning.selectedId);if(site)setInspected(site.buildings[0]);}},[planning?.selectedId]);
   useEffect(()=>{if(planning?.focusRequest&&planning.selectedId)controlsRef.current?.focusBuilding(planning.context.byId.get(planning.selectedId)!.buildingIds[0]);},[planning?.focusRequest]);
+  useEffect(()=>{setInspectedImpact(null);},[planning?.impact]);
+  const inspectImpact=(id:string)=>{setShowImpact(true);setInspectedImpact(id);const site=planning?.context.byId.get(id);if(site)controlsRef.current?.focusBuilding(site.buildingIds[0]);};
+  useEffect(()=>{if(planning?.impactInspection)inspectImpact(planning.impactInspection.id);},[planning?.impactInspection]);
+  const impact=planning?.impact,activeImpact=showImpact&&impact&&impact.status!=='unavailable';
+  const inspectedEffect=activeImpact?impact.buildings.find(b=>b.buildingId===inspectedImpact):null;
+  const rangeRadii=impact?[...new Set(impact.ranges.map(r=>r.radius*CELL_SIZE*10))].sort((a,b)=>a-b).join(' / '):'';
+  const impactLabels=activeImpact?[...impact.buildings].sort((a,b)=>Number(b.buildingId===planning!.selectedId)-Number(a.buildingId===planning!.selectedId)).slice(0,8):[];
+  const planLabels=planning?.context.sites.filter(site=>(planning.actions.some(a=>a.buildingId===site.id)||planning.selectedId===site.id)&&!impactLabels.some(b=>b.buildingId===site.id))||[];
   return <div className={`campus-view event-${event} ${expanded?'expanded-map':''}`}>
     <div className="map-chrome"><div><span className="live-dot"/> {config.name} <span className="map-chrome-separator">/</span> {flat?'俯视地图':'立体校园'}</div><span className="map-model-note">公开底图 · 近似复原</span></div>
     <div className="three-host" ref={container}/>
     <div className="map-explore"><ScanSearch size={14}/><select aria-label="地标近景" value={tour} onChange={e=>{if(e.target.value)controlsRef.current?.focusTour(e.target.value);else controlsRef.current?.reset();}}><option value="">地标近景</option>{config.tours.map(t=><option key={t.id||t.buildingId} value={t.id||t.buildingId}>{t.name}</option>)}</select><button onClick={()=>setShowLabels(v=>!v)} aria-label={showLabels?'隐藏地图标记':'显示地图标记'} title={showLabels?'隐藏地图标记':'显示地图标记'}>{showLabels?<Eye size={15}/>:<EyeOff size={15}/>}</button><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'退出大图':'展开大图'} title={expanded?'退出大图':'展开大图'}>{expanded?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button></div>
+    {impact&&<div className="map-impact-control" aria-label="地图影响图例"><div><strong>{impact.plan} · {impact.status==='installed'?'措施贡献':impact.status==='unavailable'?'暂无预览':'选址预览'} / {measure(impact.action.projectId).name}</strong><button aria-pressed={showImpact} onClick={()=>setShowImpact(v=>!v)}>{showImpact?'隐藏影响':'显示影响'}</button></div>{showImpact&&<>
+      {impact.reason?<p>{impact.reason}</p>:<><p>{['solar','retrofit'].includes(impact.action.projectId)?(impact.legacy?'保留旧方案局部实施范围':'本栋建筑范围 · 不向邻楼传播'):impact.idleShuttle?'灰色虚线：潜在范围，尚未连通':!rangeRadii?'未产生额外作用范围':`蓝色光晕：半径约 ${rangeRadii} 米 · 教学示意`}{impact.overBudget>0?' · 超预算':''}</p><div className="impact-legend"><span className="positive">● 正面</span><span className="negative">● 负面</span><span className="mixed">● 利弊并存</span><button onClick={()=>{setInspectedImpact(null);controlsRef.current?.focusImpact();}}>查看影响全貌 ↗</button></div></>}
+    </>}</div>}
     {failed?<div className="map-fallback"><img src={config.previewImage} alt={`西北工业大学${config.name}官方地图`}/><p>当前设备无法显示三维地图，措施选择仍可使用。</p></div>:<div className={`map-labels ${showLabels?'':'labels-hidden'}`} ref={labelLayer}>
-      {planning?planning.context.sites.filter(site=>planning.actions.some(a=>a.buildingId===site.id)||planning.selectedId===site.id).map(site=>{const actions=planning.actions.filter(a=>a.buildingId===site.id);return <button key={site.id} data-map-x={site.center[0]} data-map-z={site.center[1]} data-map-y={site.height+1.5} className={`map-pin ${actions.length?'selected':''} ${planning.selectedId===site.id?'focused':''}`} onClick={()=>planning.onSelect(site.id)} aria-label={`选择建筑 ${site.name}`}><span>{actions.length||'◎'}</span><em>{site.name}{actions.length?' · '+actions.map(a=>measure(a.projectId).symbol).join(' / '):''}</em></button>;}):config.projects.map((p,i)=><button key={p.id} data-map-x={p.location[0]} data-map-z={p.location[1]} data-map-y={p.id==='retrofit'?6:4} className={`map-pin ${selected.includes(p.id)?'selected':''} ${focused===p.id?'focused':''}`} onClick={()=>{setInspected(null);onFocus(p.id);}} aria-label={`查看${p.name}：${p.site}`}><span>{selected.includes(p.id)?'✓':String(i+1).padStart(2,'0')}</span><em>{p.short}</em></button>)}
+      {planning?planLabels.map(site=>{const actions=planning.actions.filter(a=>a.buildingId===site.id);return <button key={site.id} data-map-x={site.center[0]} data-map-z={site.center[1]} data-map-y={site.height+1.5} className={`map-pin ${actions.length?'selected':''} ${planning.selectedId===site.id?'focused':''}`} onClick={()=>planning.onSelect(site.id)} aria-label={`选择建筑 ${site.name}`}><span>{actions.length||'◎'}</span><em>{site.name}{actions.length?' · '+actions.map(a=>measure(a.projectId).symbol).join(' / '):''}</em></button>;}):config.projects.map((p,i)=><button key={p.id} data-map-x={p.location[0]} data-map-z={p.location[1]} data-map-y={p.id==='retrofit'?6:4} className={`map-pin ${selected.includes(p.id)?'selected':''} ${focused===p.id?'focused':''}`} onClick={()=>{setInspected(null);onFocus(p.id);}} aria-label={`查看${p.name}：${p.site}`}><span>{selected.includes(p.id)?'✓':String(i+1).padStart(2,'0')}</span><em>{p.short}</em></button>)}
+      {activeImpact&&impactLabels.map(effect=>{const site=planning!.context.byId.get(effect.buildingId)!;return <button key={`impact-${site.id}`} className={`map-pin impact-pin ${effect.kind} ${inspectedImpact===site.id?'focused':''}`} data-map-x={site.center[0]} data-map-z={site.center[1]} data-map-y={site.height+2.8} onClick={()=>inspectImpact(site.id)} aria-label={`查看影响 ${site.name}：${impactKindName[effect.kind]}`}><span>{effect.kind==='mixed'?'±':effect.kind==='positive'?'+':'−'}</span><em>{site.name} · {impactKindName[effect.kind]}</em></button>;})}
       {config.landmarks.map(l=><span key={l.name} className={`landmark-label ${l.water?'water-label':''}`} data-map-x={l.location[0]} data-map-z={l.location[1]} data-map-y={l.height||1}>{l.name}</span>)}
     </div>}
     <div className="map-tools"><button onClick={()=>controlsRef.current?.zoom(1.35)} aria-label="放大地图"><Plus size={17}/></button><button onClick={()=>controlsRef.current?.zoom(1/1.35)} aria-label="缩小地图"><Minus size={17}/></button><span/><button onClick={()=>{if(flat)controlsRef.current?.reset();else controlsRef.current?.top();}} aria-label={flat?'切换立体地图':'切换俯视地图'}><Layers size={17}/></button><button onClick={()=>controlsRef.current?.reset()} aria-label="重置地图视角"><RotateCcw size={16}/></button></div>
     <div className="compass" aria-label="地图北向"><Navigation size={22} strokeWidth={1.5}/><span>N</span></div>
-    {inspected&&<div className="building-inspector"><div><MapPin size={14}/><strong>{inspected.name}</strong><button aria-label="关闭建筑详情" onClick={()=>setInspected(null)}><X size={14}/></button></div>
+    {inspectedEffect&&<div className={`building-inspector impact-inspector ${inspectedEffect.kind}`} aria-label="地图建筑影响详情"><div><strong>{planning!.context.byId.get(inspectedEffect.buildingId)!.name}</strong><button aria-label="关闭影响详情" onClick={()=>setInspectedImpact(null)}><X size={14}/></button></div><p>来自{planning!.context.byId.get(impact!.action.buildingId)!.name}的{measure(impact!.action.projectId).name} · {impactKindName[inspectedEffect.kind]}</p><ImpactEffects effect={inspectedEffect}/><p>周边体验净变化 {impactNumber(inspectedEffect.netComfort)} · 教学指数</p><button className="inspect-closeup" onClick={()=>{setInspectedImpact(null);controlsRef.current?.focusImpact();}}>返回影响全貌 ↗</button></div>}
+    {inspected&&!activeImpact&&<div className="building-inspector"><div><MapPin size={14}/><strong>{inspected.name}</strong><button aria-label="关闭建筑详情" onClick={()=>setInspected(null)}><X size={14}/></button></div>
       {inspected.statusNote&&<p className={`building-status ${inspected.status==='under-construction'?'is-construction':''}`}>{inspected.statusNote}</p>}
       <p>{inspected.positionNote||`${inspected.source||(inspected.id.startsWith('official-')?'校方图补绘轮廓':'OSM 建筑轮廓')} · 高度与立面为示意`}</p>
       {inspected.evidence&&<details className="building-evidence"><summary>查看核对资料</summary>{inspected.evidence.map(e=><a key={e.label} href={e.url} target="_blank" rel="noreferrer">{e.image&&<img src={assetUrl(e.image)} alt={e.label} loading="lazy"/>}<span>{e.label} ↗</span></a>)}</details>}
