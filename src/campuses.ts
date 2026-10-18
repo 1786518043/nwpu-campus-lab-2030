@@ -3,6 +3,7 @@ import youyiData from './data/youyi.json';
 import {PROJECTS} from './game';
 import type {ProjectId} from './game';
 import type {CampusConfig,CampusId} from './campusTypes';
+import {assetUrl} from './assetUrl';
 
 const youyiSites:Record<ProjectId,{site:string;location:[number,number];buildingIds:string[];description?:string}>={
   retrofit:{site:'东图书馆 / 国际会议中心',location:[3.35,19.26],buildingIds:['1267628278']},
@@ -15,7 +16,7 @@ const youyiSites:Record<ProjectId,{site:string;location:[number,number];building
 export const CAMPUSES:Record<CampusId,CampusConfig>={
   changan:{
     id:'changan',name:'长安校区',english:'CHANG’AN',subtitle:'山水园林 · 绿色更新',data:changanData,projects:PROJECTS,
-    osmWay:'273391732',referenceImage:'/reference/nwpu-changan-official-map.jpg',previewImage:'/reference/nwpu-changan-official-map-preview.jpg',guideImage:'/reference/nwpu-changan-guide-map-2025.png',mapDownload:'/data/campus-map.json',
+    osmWay:'273391732',referenceImage:assetUrl('/reference/nwpu-changan-official-map.jpg'),previewImage:assetUrl('/reference/nwpu-changan-official-map-preview.jpg'),guideImage:assetUrl('/reference/nwpu-changan-guide-map-2025.png'),mapDownload:assetUrl('/data/campus-map.json'),
     sourceDescription:'依据 OSM 建筑轮廓与校方地图，结合官方导览、2024年美食广场开业照片及2026年宿舍航拍核对海天苑。4号楼位于1号楼北侧、留学生公寓西侧；四期位于2号楼西侧原农场地块；美食广场位于餐厅北侧原绿化带。',
     supplementDescription:'核对日期：2026年10月18日。新增三处的相邻关系经公开资料核对，占地边线、层高与立面仍为人工近似复原。四期按2026年8月主体封顶后的在建阶段表现，施工设施位置示意；设计效果图不作为竣工现状。运动场内部场线示意，底座不是地籍边界；本图不是实测校园地图。',
     auditSources:[
@@ -38,7 +39,7 @@ export const CAMPUSES:Record<CampusId,CampusConfig>={
   },
   youyi:{
     id:'youyi',name:'友谊校区',english:'YOUYI',subtitle:'城市校园 · 存量焕新',data:youyiData,projects:PROJECTS.map(p=>({...p,...youyiSites[p.id]})),
-    osmWay:'177231509',referenceImage:'https://peixun.nwpu.edu.cn/youyixiaoquxianzhuang20210304.jpg',previewImage:'/reference/nwpu-youyi-official-map-preview.jpg',guideImage:'/reference/nwpu-youyi-guide-map-2025.png',mapDownload:'/data/youyi-map.json',
+    osmWay:'177231509',referenceImage:'https://peixun.nwpu.edu.cn/youyixiaoquxianzhuang20210304.jpg',previewImage:assetUrl('/reference/nwpu-youyi-official-map-preview.jpg'),guideImage:assetUrl('/reference/nwpu-youyi-guide-map-2025.png'),mapDownload:assetUrl('/data/youyi-map.json'),
     sourceDescription:'依据 OpenStreetMap 友谊校区主校园边界，保留密集街区、公字楼、教学楼群、生活区及田径场的空间关系，并与学校 2021 年校园现状图、2025 年导览图交叉核对。',
     supplementDescription:'当前展示 OSM 主校园边界范围；校方地图中的部分西侧、南侧分离附属地块未纳入。新旧地图存在年代与标注差异，不保证反映当前全部建设状态。',
     shuttleRoadNames:['三航路'],athleticsIds:['333840994'],

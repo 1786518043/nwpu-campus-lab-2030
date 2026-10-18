@@ -9,6 +9,7 @@ import {buildCampusBuildings} from './buildingModels';
 import {addLandscapeDetails} from './landscapeModels';
 import {addConstructionSites} from './constructionModels';
 import {GROUND_TOP,BOARD_DEPTH} from './mapLevels';
+import {assetUrl} from './assetUrl';
 
 type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void};
 type MapController={zoom:(factor:number)=>void;reset:()=>void;top:()=>void;focusBuilding:(id:string)=>void;focusTour:(id:string)=>void};
@@ -161,7 +162,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
     {inspected&&<div className="building-inspector"><div><MapPin size={14}/><strong>{inspected.name}</strong><button aria-label="关闭建筑详情" onClick={()=>setInspected(null)}><X size={14}/></button></div>
       {inspected.statusNote&&<p className={`building-status ${inspected.status==='under-construction'?'is-construction':''}`}>{inspected.statusNote}</p>}
       <p>{inspected.positionNote||`${inspected.source||(inspected.id.startsWith('official-')?'校方图补绘轮廓':'OSM 建筑轮廓')} · 高度与立面为示意`}</p>
-      {inspected.evidence&&<details className="building-evidence"><summary>查看核对资料</summary>{inspected.evidence.map(e=><a key={e.label} href={e.url} target="_blank" rel="noreferrer">{e.image&&<img src={e.image} alt={e.label} loading="lazy"/>}<span>{e.label} ↗</span></a>)}</details>}
+      {inspected.evidence&&<details className="building-evidence"><summary>查看核对资料</summary>{inspected.evidence.map(e=><a key={e.label} href={e.url} target="_blank" rel="noreferrer">{e.image&&<img src={assetUrl(e.image)} alt={e.label} loading="lazy"/>}<span>{e.label} ↗</span></a>)}</details>}
       <button className="inspect-closeup" onClick={()=>controlsRef.current?.focusBuilding(inspected.id)}><ScanSearch size={13}/>近看这栋建筑</button></div>}
     {hover&&!inspected&&<div className="map-hover"><MapPin size={13}/>{hover}</div>}
     <div className="map-bottom"><span>拖动旋转 · 滚轮缩放 · 点击建筑查看细节</span><button onClick={onSources}>地图来源与精度 ↗</button></div>

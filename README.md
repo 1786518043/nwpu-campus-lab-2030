@@ -25,7 +25,9 @@ pnpm build
 pnpm preview
 ```
 
-`dist/` 为生产构建。公网版本通过 Sites 托管，站点身份保存在 `.openai/hosting.json`；公网更新需要重新构建、保存版本并部署，不会随本机文件编辑自动上线。公网访问无需本机保持开机，各访问者的实验进度保存在自己的浏览器中。
+`dist/` 为生产构建。GitHub Pages 发布流程见 `.github/workflows/pages.yml`：推送 `main` 后自动安装锁定依赖、执行测试、构建并部署；仓库 Settings → Pages 的 Source 应设为 GitHub Actions。更新是否上线以 Actions 的部署结果为准。本机文件修改不会自动推送。Vite 和参考图片使用相对于站点的路径，可部署在仓库子目录或域名根目录。
+
+公网访问无需本机保持开机，各访问者的实验进度保存在自己的浏览器中。更换域名后旧地址的浏览器存档不会自动迁移，可在旧地址导出结果备份。此前的 Sites 配置保留在 `.openai/hosting.json`，GitHub 工作流不会更新或依赖该站点。
 
 ## 可以怎么玩
 
