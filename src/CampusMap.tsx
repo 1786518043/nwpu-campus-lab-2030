@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {Plus,Minus,RotateCcw,Layers,Navigation,MapPin,Maximize2,Minimize2,Eye,EyeOff,X,ScanSearch} from 'lucide-react';
+import {Plus,Minus,RotateCcw,Layers,Navigation,MapPin,Maximize2,Minimize2,Eye,EyeOff,X,ScanSearch,PanelRightOpen} from 'lucide-react';
 import type {ProjectId,EventId} from './game';
 import type {CampusConfig,Building} from './campusTypes';
 import {boundsOf,pointInside,shapeOf} from './mapGeometry';
@@ -23,12 +23,22 @@ import {CELL_SIZE} from './spatial';
 import {COMPARISON_METRICS,comparisonBuildings,comparisonDisplay,comparisonKindName} from './buildingComparison';
 import type {PlanComparison,ComparisonMetric} from './buildingComparison';
 import {ComparisonDetails,ComparisonMetricPicker} from './ComparisonSummary';
+import {CampusMapVoices} from './CampusMapVoices';
+import type {MapFeedback} from './CampusMapVoices';
+import {CampusAvatar} from './CampusAvatar';
+import {mapChatLayout} from './mapChatLayout';
+import {MapMeasuresPanel} from './MapMeasuresPanel';
+import type {MapMeasureControls} from './MapMeasuresPanel';
 
-type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void;planning?:{context:BuildingContext;actions:BuildingAction[];result:SpatialResult;selectedId:string|null;focusRequest:number;onSelect:(buildingId:string)=>void;impact:ActionImpact|null;impactInspection:{id:string;serial:number}|null};comparison?:{data:PlanComparison;metric:ComparisonMetric;onMetric:(metric:ComparisonMetric)=>void;selectedId:string|null;focusRequest:number;onSelect:(id:string|null,focus?:boolean)=>void;onExit:()=>void;condition:string}};
+type MapProps={config:CampusConfig;selected:ProjectId[];focused:ProjectId|null;event:EventId;onFocus:(id:ProjectId)=>void;onSources:()=>void;onClearFocus:()=>void;planning?:{context:BuildingContext;actions:BuildingAction[];result:SpatialResult;selectedId:string|null;focusRequest:number;onSelect:(buildingId:string)=>void;impact:ActionImpact|null;impactInspection:{id:string;serial:number}|null;feedback?:MapFeedback;measures?:MapMeasureControls};comparison?:{data:PlanComparison;metric:ComparisonMetric;onMetric:(metric:ComparisonMetric)=>void;selectedId:string|null;focusRequest:number;onSelect:(id:string|null,focus?:boolean)=>void;onExit:()=>void;condition:string}};
 type MapController={zoom:(factor:number)=>void;reset:()=>void;top:()=>void;focusBuilding:(id:string)=>void;focusTour:(id:string)=>void;focusImpact:()=>void;focusComparison:()=>void};
 
 export default function CampusMap({config,selected,focused,event,onFocus,onSources,onClearFocus,planning,comparison}:MapProps){
+  const mapFrame=useRef<HTMLDivElement>(null);
+  const [measuresPreference,setMeasuresPreference]=useState<boolean|null>(null),[drawerMode,setDrawerMode]=useState(true);
+  const measuresOpen=!!planning?.measures&&(measuresPreference??!drawerMode);
   const container=useRef<HTMLDivElement>(null),labelLayer=useRef<HTMLDivElement>(null);
+  const chatLayer=useRef<HTMLDivElement>(null);
   const controlsRef=useRef<MapController|null>(null);
   const [showImpact,setShowImpact]=useState(true),[inspectedImpact,setInspectedImpact]=useState<string|null>(null);
   const [showComparison,setShowComparison]=useState(true);
@@ -37,12 +47,27 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
   const [failed,setFailed]=useState(false),[flat,setFlat]=useState(false),[hover,setHover]=useState('');
   const [expanded,setExpanded]=useState(false),[showLabels,setShowLabels]=useState(true);
   const [tour,setTour]=useState(''),[inspected,setInspected]=useState<Building|null>(null);
+  function closeMeasures(){
+    setMeasuresPreference(false);
+    requestAnimationFrame(()=>mapFrame.current?.querySelector<HTMLButtonElement>('.map-measures-toggle')?.focus({preventScroll:true}));
+  }
+  useEffect(()=>{
+    if(measuresOpen&&drawerMode)mapFrame.current?.querySelector<HTMLButtonElement>('.map-measures-heading>button')?.focus({preventScroll:true});
+  },[measuresOpen,drawerMode]);
+  useEffect(()=>{
+    const frame=mapFrame.current!;
+    const observer=new ResizeObserver(()=>setDrawerMode(frame.clientWidth<740));
+    observer.observe(frame);return()=>observer.disconnect();
+  },[]);
   useEffect(()=>{
     if(!expanded)return;
     const old=document.body.style.overflow;document.body.style.overflow='hidden';
-    const escape=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false);};window.addEventListener('keydown',escape);
-    return()=>{document.body.style.overflow=old;window.removeEventListener('keydown',escape);};
+    return()=>{document.body.style.overflow=old;};
   },[expanded]);
+  useEffect(()=>{
+    const escape=(e:KeyboardEvent)=>{if(e.key!=='Escape')return;if(drawerMode&&measuresOpen)closeMeasures();else if(expanded)setExpanded(false);};
+    window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);
+  },[drawerMode,measuresOpen,expanded]);
   useEffect(()=>{
     const host=container.current!,campus=config.data,projects=config.projects;
     const bounds=boundsOf(campus.boundary),size=Math.max(bounds.width,bounds.depth),cx=bounds.cx,cz=bounds.cz;
@@ -137,6 +162,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
         const points=source.buildings.flatMap(b=>b.points);
         for(const range of p.impact.ranges){const c=p.context.world.byId.get(range.cellId)!;const r=range.radius*CELL_SIZE;points.push([c.x-r,c.z-r],[c.x+r,c.z+r]);}
         for(const effect of p.impact.buildings)points.push(...p.context.byId.get(effect.buildingId)!.buildings.flatMap(b=>b.points));
+        for(const route of p.impact.routes)points.push(...route.points);
         const box=boundsOf(points);closeup(box.cx,box.cz,Math.max(box.width,box.depth,12),source.height);setInspected(null);
       },
       focusComparison:()=>{
@@ -156,10 +182,12 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
         lastImpact=impact;lastComparison=comparison?.data;lastComparisonMode=comparisonMode;
         if(comparison&&planning)drawComparisonOverlay(impactMarkers,planning.context,s.showComparison?s.differences:[]);else drawImpactOverlay(impactMarkers,planning?.context!,impact||null);
         renderer.domElement.dataset.impactBuildings=String(impact?.buildings.length||0);renderer.domElement.dataset.impactRanges=String(impact?.ranges.length||0);
+        renderer.domElement.dataset.previewRoutes=String(impact?.routes.length||0);
         renderer.domElement.dataset.comparisonBuildings=String(comparison&&s.showComparison?s.differences.length:0);renderer.domElement.dataset.comparisonMetric=comparison?.metric||'';
       }
       if(key!==lastKey){
         if(planning)drawBuildingInterventions(spatialMarkers,planning.context,planning.actions,planning.selectedId,planning.result);
+        renderer.domElement.dataset.shuttleRoutes=String(planning?.result.routes.length||0);
         lastKey=key;buildings.forEach(mesh=>{const site=planning?.context.byBuildingId.get(mesh.userData.id),p=projects.find(p=>p.buildingIds.includes(mesh.userData.id));const active=planning?planning.actions.some(a=>a.buildingId===site?.id&&a.projectId==='retrofit'):p&&selected.includes(p.id);const wall=mesh.userData.wall as THREE.MeshStandardMaterial;wall.color.set(active?0x94b89c:mesh.userData.baseColor);wall.emissive.set(site&&site.id===planning?.selectedId?0x493c18:0x000000);wall.emissiveIntensity=.18;});
         rings.forEach((ring,id)=>{ring.visible=selected.includes(id)||id===focused;(ring.material as THREE.MeshBasicMaterial).color.set(selected.includes(id)?0x237654:0xd4aa41);});
         shuttlePaths.forEach(p=>p.visible=selected.includes('shuttle'));walkPaths.forEach(p=>p.visible=selected.includes('walk'));
@@ -168,6 +196,26 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
       }
       const rect=host.getBoundingClientRect();origin.set(0,0,0).project(camera);north.set(0,0,-10).project(camera);
       const compass=host.parentElement?.querySelector<SVGElement>('.compass svg');if(compass)compass.style.transform=`rotate(${Math.atan2((north.x-origin.x)*rect.width,(north.y-origin.y)*rect.height)*180/Math.PI-45}deg)`;
+      // HTML speech bubbles share the camera projection used by building markers.
+      // Clamp only the bubble, leaving a leader pointing to the real building.
+      const chat=chatLayer.current,card=chat?.querySelector<HTMLElement>('.map-chat');
+      const chatSite=planning?.selectedId?planning.context.byId.get(planning.selectedId):undefined;
+      let chatBounds:DOMRect|undefined;
+      if(chat&&card&&chatSite){
+        const top=Math.max(60,...Array.from(host.parentElement?.querySelectorAll<HTMLElement>('.map-chrome,.map-explore,.map-impact-control')||[]).map(e=>e.getBoundingClientRect().bottom-rect.top+10));
+        const inspector=host.parentElement?.querySelector<HTMLElement>('.building-inspector');
+        const bottom=Math.min(rect.height-48,inspector?inspector.getBoundingClientRect().top-rect.top-8:rect.height);
+        card.style.maxHeight=`${Math.max(60,bottom-top)}px`;
+        vector.set(chatSite.center[0],chatSite.height+2,chatSite.center[1]).project(camera);
+        const x=(vector.x+1)*rect.width/2,y=(-vector.y+1)*rect.height/2;
+        const position=mapChatLayout(x,y,card.offsetWidth,card.offsetHeight,{left:12,top,width:rect.width-80,height:Math.max(60,bottom-top)});
+        card.style.transform=`translate(${position.left}px,${position.top}px)`;
+        chat.dataset.anchored=String(position.anchorVisible);chat.dataset.buildingId=chatSite.id;
+        const leader=chat.querySelector<SVGElement>('.map-chat-leader')!,line=leader.querySelector('path')!,dot=leader.querySelector('circle')!;
+        leader.style.visibility=position.anchorVisible?'visible':'hidden';
+        line.setAttribute('d',`M${position.lineX},${position.lineY} L${x},${y}`);dot.setAttribute('cx',String(x));dot.setAttribute('cy',String(y));
+        chatBounds=card.getBoundingClientRect();
+      }
       const occupied:{x:number;y:number;w:number;h:number}[]=[];
       const blockers=comparison?Array.from(host.parentElement?.querySelectorAll<HTMLElement>('.map-comparison-control,.map-explore,.comparison-inspector')||[]).map(e=>e.getBoundingClientRect()):[];
       const labels=Array.from(labelLayer.current?.querySelectorAll<HTMLElement>('[data-map-x]')||[]).sort((a,b)=>Number(b.classList.contains('focused')||b.classList.contains('selected'))-Number(a.classList.contains('focused')||a.classList.contains('selected')));
@@ -180,6 +228,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
         const overlaps=occupied.some(o=>Math.abs(x-o.x)<(w+o.w)/2+5&&Math.abs(y-o.y)<Math.max(h,o.h)+3);
         if(overlaps&&label.classList.contains('map-pin')&&!label.classList.contains('focused')){label.classList.add('compact-label');w=28;}
         outside=outside||blockers.some(b=>x+w/2>b.left-rect.left&&x-w/2<b.right-rect.left&&y>b.top-rect.top&&y-h<b.bottom-rect.top);
+        if(chatBounds)outside=outside||(x+w/2>chatBounds.left-rect.left-4&&x-w/2<chatBounds.right-rect.left+4&&y>chatBounds.top-rect.top-4&&y-h<chatBounds.bottom-rect.top+4);
         label.style.visibility=outside||overlaps&&label.classList.contains('landmark-label')?'hidden':'visible';
         if(!outside)occupied.push({x,y,w,h});
       });renderer.render(scene,camera);
@@ -207,7 +256,11 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
   const comparisonLabels=[...differences].sort((a,b)=>Number(b.buildingId===comparison?.selectedId)-Number(a.buildingId===comparison?.selectedId)).slice(0,8);
   const comparedBuilding=comparison?.data.buildings.find(b=>b.buildingId===comparison.selectedId);
   const comparedDisplay=comparedBuilding&&comparison?comparisonDisplay(comparedBuilding,comparison.metric):null;
-  return <div className={`campus-view event-${event} ${expanded?'expanded-map':''}`}>
+  const chatSite=planning?.selectedId?planning.context.byId.get(planning.selectedId):undefined;
+  const feedback=planning?.feedback;
+  const feedbackKey=feedback?`${chatSite?.id}|${feedback.plan}|${feedback.condition}|${feedback.feasible}|${feedback.voices.map(v=>v.id+v.evidence).join('|')}`:'';
+  return <div ref={mapFrame} className={`campus-view event-${event} ${expanded?'expanded-map':''} ${measuresOpen?'measures-open':''} ${drawerMode?'measures-drawer':''}`}>
+    <div className="map-scene" inert={drawerMode&&measuresOpen?true:undefined}>
     <div className="map-chrome"><div><span className="live-dot"/> {config.name} <span className="map-chrome-separator">/</span> {flat?'俯视地图':'立体校园'}</div><span className="map-model-note">公开底图 · 近似复原</span></div>
     <div className="three-host" ref={container}/>
     {comparison&&<div className="map-impact-control map-comparison-control" aria-label="三维 A/B 对照控制">
@@ -217,7 +270,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
       {showComparison&&<div className="impact-legend"><span className="positive">● B 更优</span><span className="negative">● B 更差</span><span className="mixed">● 有取舍</span><span className="neutral">● 无差异</span><button onClick={()=>controlsRef.current?.focusComparison()}>集中查看差异 ↗</button></div>}
       {!differences.length&&<p>{comparison.data.identical?'两套配置相同，暂无差异高亮':'当前指标无明显差异'}</p>}
     </div>}
-    <div className="map-explore"><ScanSearch size={14}/><select aria-label="地标近景" value={tour} onChange={e=>{if(e.target.value)controlsRef.current?.focusTour(e.target.value);else controlsRef.current?.reset();}}><option value="">地标近景</option>{config.tours.map(t=><option key={t.id||t.buildingId} value={t.id||t.buildingId}>{t.name}</option>)}</select><button onClick={()=>setShowLabels(v=>!v)} aria-label={showLabels?'隐藏地图标记':'显示地图标记'} title={showLabels?'隐藏地图标记':'显示地图标记'}>{showLabels?<Eye size={15}/>:<EyeOff size={15}/>}</button><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'退出大图':'展开大图'} title={expanded?'退出大图':'展开大图'}>{expanded?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button></div>
+    <div className="map-explore"><ScanSearch size={14}/><select aria-label="地标近景" value={tour} onChange={e=>{if(e.target.value)controlsRef.current?.focusTour(e.target.value);else controlsRef.current?.reset();}}><option value="">地标近景</option>{config.tours.map(t=><option key={t.id||t.buildingId} value={t.id||t.buildingId}>{t.name}</option>)}</select><button onClick={()=>setShowLabels(v=>!v)} aria-label={showLabels?'隐藏地图标记':'显示地图标记'} title={showLabels?'隐藏地图标记':'显示地图标记'}>{showLabels?<Eye size={15}/>:<EyeOff size={15}/>}</button><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'退出大图':'展开大图'} title={expanded?'退出大图':'展开大图'}>{expanded?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button>{planning?.measures&&!measuresOpen&&<button className="map-measures-toggle" aria-label="展开当前措施侧栏" aria-expanded={false} aria-controls="map-measures-panel" onClick={()=>setMeasuresPreference(true)}><PanelRightOpen size={14}/><span>措施</span><b>{planning.actions.length}</b></button>}</div>
     {impact&&<div className="map-impact-control" aria-label="地图影响图例"><div><strong>{impact.plan} · {impact.status==='installed'?'措施贡献':impact.status==='unavailable'?'暂无预览':'选址预览'} / {measure(impact.action.projectId).name}</strong><button aria-pressed={showImpact} onClick={()=>setShowImpact(v=>!v)}>{showImpact?'隐藏影响':'显示影响'}</button></div>{showImpact&&<>
       {impact.reason?<p>{impact.reason}</p>:<><p>{['solar','retrofit'].includes(impact.action.projectId)?(impact.legacy?'保留旧方案局部实施范围':'本栋建筑范围 · 不向邻楼传播'):impact.idleShuttle?'灰色虚线：潜在范围，尚未连通':!rangeRadii?'未产生额外作用范围':`蓝色光晕：半径约 ${rangeRadii} 米 · 教学示意`}{impact.overBudget>0?' · 超预算':''}</p><div className="impact-legend"><span className="positive">● 正面</span><span className="negative">● 负面</span><span className="mixed">● 利弊并存</span><button onClick={()=>{setInspectedImpact(null);controlsRef.current?.focusImpact();}}>查看影响全貌 ↗</button></div></>}
     </>}</div>}
@@ -227,6 +280,7 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
       {comparison&&showComparison&&comparisonLabels.map(d=>{const site=planning!.context.byId.get(d.buildingId)!;return <button key={`compare-${site.id}`} className={`map-pin impact-pin comparison-pin ${d.kind} ${comparison.selectedId===site.id?'focused':''}`} data-map-x={site.center[0]} data-map-z={site.center[1]} data-map-y={site.height+2} onClick={()=>comparison.onSelect(site.id,true)} aria-label={`查看对照 ${site.name}`}><span>{d.kind==='positive'?'+':d.kind==='negative'?'−':d.kind==='mixed'?'±':'≈'}</span><em>{site.name} · {d.value===null?comparisonKindName[d.kind]:impactNumber(d.value)}</em></button>;})}
       {config.landmarks.map(l=><span key={l.name} className={`landmark-label ${l.water?'water-label':''}`} data-map-x={l.location[0]} data-map-z={l.location[1]} data-map-y={l.height||1}>{l.name}</span>)}
     </div>}
+    {!comparison&&feedback&&!inspectedEffect&&(chatSite?<CampusMapVoices key={feedbackKey} feedback={feedback} buildingName={chatSite.name} layerRef={chatLayer} fallback={failed} onLocate={()=>controlsRef.current?.focusBuilding(chatSite.buildingIds[0])}/>:<div className="map-chat-welcome"><CampusAvatar character="student"/><span><strong>校园里，有话想对你说</strong><small>点一栋建筑，听听大家的想法</small></span></div>)}
     <div className="map-tools"><button onClick={()=>controlsRef.current?.zoom(1.35)} aria-label="放大地图"><Plus size={17}/></button><button onClick={()=>controlsRef.current?.zoom(1/1.35)} aria-label="缩小地图"><Minus size={17}/></button><span/><button onClick={()=>{if(flat)controlsRef.current?.reset();else controlsRef.current?.top();}} aria-label={flat?'切换立体地图':'切换俯视地图'}><Layers size={17}/></button><button onClick={()=>controlsRef.current?.reset()} aria-label="重置地图视角"><RotateCcw size={16}/></button></div>
     <div className="compass" aria-label="地图北向"><Navigation size={22} strokeWidth={1.5}/><span>N</span></div>
     {comparison&&comparedDisplay&&<div className={`building-inspector impact-inspector comparison-inspector ${comparedDisplay.kind}`} aria-label="地图建筑 A/B 明细"><div><strong>{planning!.context.byId.get(comparedDisplay.buildingId)!.name}</strong><button aria-label="关闭 A/B 建筑明细" onClick={()=>comparison.onSelect(null)}><X size={14}/></button></div><p>{COMPARISON_METRICS.find(m=>m.id===comparison.metric)!.name} · {comparisonKindName[comparedDisplay.kind]}</p><ComparisonDetails building={comparedDisplay} metric={comparison.metric}/></div>}
@@ -238,5 +292,10 @@ export default function CampusMap({config,selected,focused,event,onFocus,onSourc
       <button className="inspect-closeup" onClick={()=>controlsRef.current?.focusBuilding(inspected.id)}><ScanSearch size={13}/>近看这栋建筑</button>{planning&&<button className="inspect-closeup configure-building" onClick={()=>{planning.onSelect(inspected.id);setExpanded(false);document.getElementById('building-controls')?.scrollIntoView({behavior:'smooth',block:'start'});}}>为这栋楼配置措施 →</button>}</div>}
     {hover&&!inspected&&<div className="map-hover"><MapPin size={13}/>{hover}</div>}
     <div className="map-bottom"><span>拖动旋转 · 滚轮缩放 · 点击建筑{comparison?'查看 A/B 差值':planning?'选择措施':'查看细节'}</span><button onClick={onSources}>地图来源与精度 ↗</button></div>
+    </div>
+    {measuresOpen&&planning?.measures&&<>
+      {drawerMode&&<button className="map-measures-backdrop" aria-label="收起措施并返回地图" onClick={closeMeasures}/>}
+      <MapMeasuresPanel context={planning.context} actions={planning.actions} result={planning.result} selectedId={planning.selectedId} controls={{...planning.measures,onFocus:action=>{setInspectedImpact(null);planning.measures!.onFocus(action);if(drawerMode)closeMeasures();}}} comparing={!!comparison} compact={drawerMode} onClose={closeMeasures} onOverview={()=>{setInspectedImpact(null);controlsRef.current?.reset();if(drawerMode)closeMeasures();}}/>
+    </>}
   </div>;
 }

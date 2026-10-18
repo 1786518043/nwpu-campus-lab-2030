@@ -3,6 +3,7 @@ import type {BuildingAction,BuildingContext} from './buildingPlanning';
 import {actionKey,actionSignature,evaluateBuildingPlan} from './buildingPlanning';
 import {buildingExposure} from './buildingImpact';
 import type {SpatialResult,CellResult} from './spatial';
+import {shuttleRouteEnergy} from './spatial';
 
 export const COMPARISON_EPS=.005;
 export type ComparisonMetric='overall'|'comfort'|'costs'|'heat'|'runoff'|'access'|'roof';
@@ -23,7 +24,7 @@ export type ComparisonDisplay=ComparedBuilding&{kind:ComparisonKind;score:number
 export type PlanComparison={event:EventId;a:SpatialResult;b:SpatialResult;buildings:ComparedBuilding[];routeEnergyA:number;routeEnergyB:number;identical:boolean};
 const roofAction=(a:BuildingAction)=>a.projectId==='solar'||a.projectId==='retrofit';
 const energy=(r:SpatialResult)=>r.cells.reduce((s,c)=>s+c.energy,0);
-const routeEnergy=(r:SpatialResult)=>r.routes.reduce((s,path)=>s+.45+path.length*.018,0);
+const routeEnergy=(r:SpatialResult)=>shuttleRouteEnergy(r.routes);
 
 // This is a full-plan comparison, not a sum of single-action predictions.
 // The public function owns both evaluations so the event and budget cannot differ.

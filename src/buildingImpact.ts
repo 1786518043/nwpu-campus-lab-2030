@@ -2,7 +2,8 @@ import type {EventId} from './game';
 import type {BuildingAction,BuildingContext,BuildingSite} from './buildingPlanning';
 import {actionCells,actionKey,actionReason,evaluateBuildingPlan} from './buildingPlanning';
 import type {CellResult,InfluenceField,SpatialResult} from './spatial';
-import {FIELD_RADIUS} from './spatial';
+import {FIELD_RADIUS,shuttleRouteEnergy} from './spatial';
+import type {RoadRoute} from './roadNetwork';
 import {distanceToSegment} from './mapGeometry';
 
 export type ImpactKind='positive'|'negative'|'mixed';
@@ -12,7 +13,7 @@ export type ImpactRange=InfluenceField&{potential?:boolean};
 export type ActionImpact={
   action:BuildingAction;status:'preview'|'installed'|'unavailable';plan:'A'|'B';
   reason:string|null;overBudget:number;buildings:BuildingImpact[];ranges:ImpactRange[];
-  routes:string[][];routeEnergyDelta:number;idleShuttle:boolean;legacy:boolean;
+  routes:RoadRoute[];routeEnergyDelta:number;idleShuttle:boolean;legacy:boolean;
 };
 const EPS=.005;
 const exposureCache=new WeakMap<BuildingContext,Map<string,string[]>>();
@@ -25,8 +26,7 @@ export function buildingExposure(context:BuildingContext,site:BuildingSite){
   }
   return cached.get(site.id)!;
 }
-const routeEnergy=(routes:string[][])=>routes.reduce((sum,path)=>sum+.45+path.length*.018,0);
-const routeKey=(r:string[])=>[r.join('|'),[...r].reverse().join('|')].sort()[0];
+const routeKey=(r:RoadRoute)=>[r.from,r.to].sort().join('|');
 
 /** A counterfactual for one action, under the same event and surrounding plan.
  * Existing actions are compared with their removal; new actions with addition.
@@ -45,7 +45,7 @@ export function evaluateActionImpact(context:BuildingContext,actions:BuildingAct
   result.ranges=after.fields.filter(f=>Math.abs(f.strength-(oldFields.get(`${f.kind}@${f.cellId}`)||0))>1e-8);
   const oldRoutes=new Set(before.routes.map(routeKey));
   result.routes=after.routes.filter(r=>!oldRoutes.has(routeKey(r)));
-  result.routeEnergyDelta=routeEnergy(after.routes)-routeEnergy(before.routes);
+  result.routeEnergyDelta=shuttleRouteEnergy(after.routes)-shuttleRouteEnergy(before.routes);
   if(action.projectId==='shuttle'){
     const targets=actionCells(context,action);
     const inactive=targets.filter(id=>!after.fields.some(f=>f.kind==='shuttle'&&f.cellId===id));

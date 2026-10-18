@@ -4,4 +4,7 @@ import App from './App';
 import './styles.css';
 import './spatial.css';
 import './comparison.css';
+import './campusPlay.css';
+import './campusMapVoices.css';
+import './mapMeasures.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

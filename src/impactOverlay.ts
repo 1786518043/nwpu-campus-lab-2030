@@ -5,6 +5,8 @@ import type {ComparisonDisplay,ComparisonKind} from './buildingComparison';
 import {CELL_SIZE} from './spatial';
 import {shapeOf} from './mapGeometry';
 import {BUILDING_BASE} from './mapLevels';
+import {stopPosition} from './roadNetwork';
+import {drawShuttleRoute} from './shuttleRouteDisplay';
 
 export const IMPACT_COLORS:Record<ImpactKind,number>={positive:0x218b64,negative:0xc44f58,mixed:0xc18323};
 export const COMPARISON_COLORS:Record<ComparisonKind,number>={...IMPACT_COLORS,neutral:0x84918a};
@@ -28,12 +30,11 @@ export function drawImpactOverlay(group:THREE.Group,context:BuildingContext,impa
     }
     const points=Array.from({length:97},(_,i)=>new THREE.Vector3(c.x+Math.cos(i/96*Math.PI*2)*radius,.24,c.z+Math.sin(i/96*Math.PI*2)*radius));
     const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineDashedMaterial({color:range.potential?0x85948a:0x3b8f9b,transparent:true,opacity:range.potential?.55:.8,dashSize:.7,gapSize:.4,depthWrite:false,depthTest:false}));line.computeLineDistances();line.renderOrder=4;line.userData.kind=range.potential?'potential-range':'range-boundary';group.add(line);
-    const anchor=new THREE.Mesh(new THREE.RingGeometry(.27,.43,32),new THREE.MeshBasicMaterial({color:0x327e93,side:THREE.DoubleSide,depthTest:false}));anchor.rotation.x=-Math.PI/2;anchor.position.set(c.x,.28,c.z);anchor.renderOrder=5;group.add(anchor);
+    const [x,z]=range.kind==='shuttle'?stopPosition(context.world.transitNetwork,range.cellId)||[c.x,c.z]:[c.x,c.z];
+    const anchor=new THREE.Mesh(new THREE.RingGeometry(.27,.43,32),new THREE.MeshBasicMaterial({color:0x327e93,side:THREE.DoubleSide,depthTest:false}));anchor.rotation.x=-Math.PI/2;anchor.position.set(x,.28,z);anchor.renderOrder=5;group.add(anchor);
   }
   drawBuildingOutlines(group,context,impact.buildings);
-  for(const route of impact.routes){
-    const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(route.map(id=>{const c=context.world.byId.get(id)!;return new THREE.Vector3(c.x,.38,c.z);})),new THREE.LineDashedMaterial({color:0x2c8d9e,dashSize:.55,gapSize:.25,depthTest:false}));line.computeLineDistances();line.renderOrder=4;line.userData.kind='preview-route';group.add(line);
-  }
+  for(const route of impact.routes)drawShuttleRoute(group,route,true);
   group.userData.source=impact.action.buildingId;
 }
 function drawBuildingOutlines(group:THREE.Group,context:BuildingContext,buildings:{buildingId:string;kind:ComparisonKind}[]){

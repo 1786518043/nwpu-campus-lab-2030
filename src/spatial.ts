@@ -2,6 +2,8 @@ import type {CampusConfig,CampusId,Building} from './campusTypes';
 import type {EventId,ProjectId} from './game';
 import {EVENTS,parseSaved} from './game';
 import {boundsOf,pointInside,distanceToSegment} from './mapGeometry';
+import {createRoadNetwork,isVehicleRoad,roadRoute} from './roadNetwork';
+import type {RoadNetwork,RoadRoute} from './roadNetwork';
 
 export const SPATIAL_VERSION='spatial-grid-40m-v1';
 export const CELL_SIZE=4; // The supplied map projection uses approximately 10 m per scene unit.
@@ -15,7 +17,7 @@ export type Cell={
   road:boolean;vehicleRoad:boolean;roadName:string;buildingId?:string;kind:string;height:number;
   impervious:number;demand:number;energy:number;heat:number;runoff:number;sun:number;dorm:number;
 };
-export type World={campusId:CampusId;version:string;cells:Cell[];byId:Map<string,Cell>;neighbors:Map<string,string[]>;roadGraph:Map<string,string[]>;transitGraph:Map<string,string[]>;bounds:ReturnType<typeof boundsOf>};
+export type World={campusId:CampusId;version:string;cells:Cell[];byId:Map<string,Cell>;neighbors:Map<string,string[]>;roadGraph:Map<string,string[]>;transitNetwork:RoadNetwork;bounds:ReturnType<typeof boundsOf>};
 export const MEASURES:{id:ProjectId;name:string;symbol:string;color:string;cost:number;description:string;rule:string}[]=[
   {id:'retrofit',name:'建筑节能改造',symbol:'改',color:'#627fad',cost:16,description:'改造所选网格内的建筑，提高围护与设备效率。高负荷建筑收益更大。',rule:'仅已建建筑；成本随建筑覆盖和体量变化。同地块先节能再计算光伏，避免重复抵扣。'},
   {id:'solar',name:'屋顶光伏',symbol:'光',color:'#c6923b',cost:18,description:'利用所选地块的屋顶发电。周围建筑遮挡和降雨会降低产出。',rule:'仅已建屋顶；光照来自相邻楼高的简化遮挡，非实测日照。减排不超过该网格剩余用能。'},
@@ -56,7 +58,7 @@ export function createWorld(config:CampusConfig):World {
     const building=[...counts].sort((a,b)=>b[1]-a[1]||a[0].id.localeCompare(b[0].id))[0]?.[0];
     let nearestRoad:typeof data.roads[number]|undefined,roadDistance=Infinity,vehicleDistance=Infinity;
     for(const road of data.roads)for(let i=1;i<road.points.length;i++){
-      const d=distanceToSegment([x,z],road.points[i-1],road.points[i]);if(d<roadDistance){nearestRoad=road;roadDistance=d;}if(!['footway','path','steps','cycleway','pedestrian'].includes(road.kind))vehicleDistance=Math.min(vehicleDistance,d);
+      const d=distanceToSegment([x,z],road.points[i-1],road.points[i]);if(d<roadDistance){nearestRoad=road;roadDistance=d;}if(isVehicleRoad(road.kind))vehicleDistance=Math.min(vehicleDistance,d);
     }
     roof/=samples;water/=samples;green=clamp(green/samples);
     const road=roadDistance<CELL_SIZE*.72&&water<.34&&construction===0&&roof<.56;
@@ -76,7 +78,7 @@ export function createWorld(config:CampusConfig):World {
     const shade=cells.reduce((v,n)=>n.z>c.z&&n.height>c.height?Math.max(v,kernel(c,n,3)*(n.height-c.height)*.18*n.roof):v,0);
     c.sun=clamp(1-shade,.2,1);
   });
-  const byId=new Map(cells.map(c=>[c.id,c])),neighbors=new Map<string,string[]>(),roadGraph=new Map<string,string[]>(),transitGraph=new Map<string,string[]>();
+  const byId=new Map(cells.map(c=>[c.id,c])),neighbors=new Map<string,string[]>(),roadGraph=new Map<string,string[]>();
   cells.forEach(c=>{
     const ns:string[]=[];
     for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)if(dr||dc){
@@ -85,9 +87,10 @@ export function createWorld(config:CampusConfig):World {
       if(dr&&dc){const a=byId.get(key(c.row+dr,c.col)),b=byId.get(key(c.row,c.col+dc));if(!a||!b||a.water>=.34||b.water>=.34)continue;}
       ns.push(n.id);
     }
-    neighbors.set(c.id,ns);if(c.road)roadGraph.set(c.id,ns.filter(id=>byId.get(id)!.road));if(c.vehicleRoad)transitGraph.set(c.id,ns.filter(id=>byId.get(id)!.vehicleRoad));
+    neighbors.set(c.id,ns);if(c.road)roadGraph.set(c.id,ns.filter(id=>byId.get(id)!.road));
   });
-  return {campusId:config.id,version:SPATIAL_VERSION,cells,byId,neighbors,roadGraph,transitGraph,bounds};
+  const transitNetwork=createRoadNetwork(data.roads,cells.filter(c=>c.vehicleRoad).map(c=>({id:c.id,point:[c.x,c.z]})));
+  return {campusId:config.id,version:SPATIAL_VERSION,cells,byId,neighbors,roadGraph,transitNetwork,bounds};
 }
 export function suitability(world:World,projectId:ProjectId,cellId:string):string|null {
   const c=world.byId.get(cellId);if(!c)return '该网格不在当前校区范围内。';
@@ -106,13 +109,8 @@ export function placementCost(world:World,p:Placement){
   const base=measure(p.projectId).cost;
   return p.projectId==='retrofit'||p.projectId==='solar'?Math.max(6,Math.round(base*(.45+c.roof*.7+Math.min(c.height,5)*.06))):base;
 }
-function roadPath(world:World,from:string,to:string):string[]|null {
-  const parents=new Map<string,string|null>([[from,null]]),queue=[from];
-  for(let head=0;head<queue.length;head++){
-    const id=queue[head];if(id===to){const path:string[]=[];let p:string|null=to;while(p!==null){path.push(p);p=parents.get(p)!;}return path.reverse();}
-    for(const n of world.transitGraph.get(id)||[])if(!parents.has(n)){parents.set(n,id);queue.push(n);}
-  }return null;
-}
+// Preserve the previous straight-road energy scale, now based on road length.
+export const shuttleRouteEnergy=(routes:readonly RoadRoute[])=>routes.reduce((sum,r)=>sum+.45+(r.length/CELL_SIZE+1)*.018,0);
 export type Interaction={kind:'positive'|'negative'|'note';name:string;detail:string;cells:string[]};
 export type CellResult={cellId:string;energy:number;heat:number;runoff:number;access:number;comfort:number;initialComfort:number;noise:number;ecology:number;light:number;synergy:number;served:boolean};
 export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId,buildingInput?:{energySavings:Record<string,number>;cost:number;problems:string[]}){
@@ -121,16 +119,16 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
   for(const p of placements){const k=placementKey(p),reason=suitability(world,p.projectId,p.cellId);if(reason)problems.push(reason);if(seen.has(k))problems.push('同一网格不能重复实施同一种措施。');seen.add(k);}
   const valid=placements.filter((p,i)=>!suitability(world,p.projectId,p.cellId)&&placements.findIndex(q=>placementKey(q)===placementKey(p))===i);
   const groups=Object.fromEntries(MEASURES.map(m=>[m.id,valid.filter(p=>p.projectId===m.id).map(p=>world.byId.get(p.cellId)!)])) as Record<ProjectId,Cell[]>;
-  const interactions:Interaction[]=[],routes:string[][]=[],activeStops=new Set<string>();
+  const interactions:Interaction[]=[],routes:RoadRoute[]=[],activeStops=new Set<string>();
   // Deterministic shortest-path spanning forest; a disconnected component never receives invented roads.
-  const edges:{a:Cell;b:Cell;path:string[]}[]=[];
-  groups.shuttle.forEach((a,i)=>groups.shuttle.slice(i+1).forEach(b=>{const path=roadPath(world,a.id,b.id);if(path&&path.length>=4)edges.push({a,b,path});}));
+  const edges:{a:Cell;b:Cell;path:RoadRoute}[]=[];
+  groups.shuttle.forEach((a,i)=>groups.shuttle.slice(i+1).forEach(b=>{const path=roadRoute(world.transitNetwork,a.id,b.id);if(path&&path.length>=3*CELL_SIZE)edges.push({a,b,path});}));
   edges.sort((a,b)=>a.path.length-b.path.length||a.a.id.localeCompare(b.a.id)||a.b.id.localeCompare(b.b.id));
   const roots=new Map(groups.shuttle.map(c=>[c.id,c.id]));
   const root=(id:string):string=>{while(roots.get(id)!==id)id=roots.get(id)!;return id;};
   for(const edge of edges)if(root(edge.a.id)!==root(edge.b.id)){roots.set(root(edge.a.id),root(edge.b.id));routes.push(edge.path);activeStops.add(edge.a.id);activeStops.add(edge.b.id);}
-  for(const c of groups.shuttle)if(!activeStops.has(c.id))interactions.push({kind:'negative',name:'接驳站尚未连成服务',detail:'需另设一个沿道路连通、至少相隔三个网格步长的站点；当前站点不产生出行收益。',cells:[c.id]});
-  if(routes.length)interactions.push({kind:'positive',name:'接驳线路已连通',detail:`按现有道路生成 ${routes.length} 段连接；服务范围围绕站点，沿线空白处不会被当成站点。`,cells:[...activeStops]});
+  for(const c of groups.shuttle)if(!activeStops.has(c.id))interactions.push({kind:'negative',name:'接驳站尚未连成服务',detail:'需另设一个沿车辆道路连通、沿路距离至少约 120 米的站点；当前站点不产生出行收益。',cells:[c.id]});
+  if(routes.length)interactions.push({kind:'positive',name:'接驳线路已连通',detail:`沿地图已有车辆道路生成 ${routes.length} 段连接，合计约 ${Math.round(routes.reduce((sum,r)=>sum+r.length,0)*10)} 米；服务范围围绕站点，沿线空白处不会被当成站点。`,cells:[...activeStops]});
   const walkIds=new Set(groups.walk.map(c=>c.id)),connectedWalk=new Set<string>(),feeder=new Set<string>();
   for(const c of groups.walk){
     if((world.roadGraph.get(c.id)||[]).some(id=>walkIds.has(id)))connectedWalk.add(c.id);
@@ -175,7 +173,7 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
     return {cellId:c.id,energy,heat,runoff,access,comfort,initialComfort,noise,ecology,light,synergy,served};
   });
   // Each connected service consumes energy even when its demand is low.
-  const routeEnergy=routes.reduce((s,path)=>s+.45+path.length*.018,0);totalEnergy+=routeEnergy;
+  const routeEnergy=shuttleRouteEnergy(routes);totalEnergy+=routeEnergy;
   for(const c of groups.shuttle)if(activeStops.has(c.id)&&world.cells.some(n=>n.dorm>0&&distance(c,n)<2))interactions.push({kind:'negative',name:'接驳站 × 宿舍噪声',detail:'站点运行影响周围宿舍网格；可以后退一格，比较服务覆盖与安静程度的变化。',cells:[c.id]});
   for(const c of groups.lighting)if(world.cells.some(n=>(n.green>.15||n.water>.1)&&distance(c,n)<2))interactions.push({kind:'negative',name:'照明 × 生态光扰动',detail:'光照覆盖绿地或水边产生局部生态扰动，并扣减该地块体验；照明也消耗能源。',cells:[c.id]});
   const cost=buildingInput?.cost??placements.reduce((n,p)=>n+placementCost(world,p),0),budget=EVENTS.find(e=>e.id===event)!.budget;

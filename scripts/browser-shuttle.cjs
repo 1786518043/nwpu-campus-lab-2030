@@ -1,0 +1,62 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'C:/Users/A/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const url=process.env.CAMPUS_PREVIEW_URL||'http://127.0.0.1:4173/';
+(async()=>{
+  fs.mkdirSync('test-results',{recursive:true});
+  const browser=await chromium.launch({channel:'msedge',headless:true});
+  const errors=[];
+  try{
+    const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+    page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
+    const key=id=>id==='changan'?'campus2030:green:v1':'campus2030:green:youyi:v1';
+    const saved=id=>page.evaluate(k=>JSON.parse(localStorage.getItem(k)),key(id));
+    const board=page.getByRole('region',{name:'校园行动手册'});
+    const choose=async id=>{await page.getByLabel('选择建筑',{exact:true}).selectOption(id);await page.locator('.measure-picker').getByRole('button',{name:/接驳站点/}).click();};
+    const routes=async n=>page.locator(`canvas[data-shuttle-routes="${n}"]`).waitFor();
+    const place=()=>page.getByRole('button',{name:'确认配置接驳站点',exact:true}).click();
+    await page.goto(url);await routes(0);
+    for(const campus of ['changan','youyi']){
+      if(campus==='youyi')await page.getByRole('button',{name:/友谊校区 YOUYI/}).click();
+      const ids=campus==='changan'?['177231713','177231719']:['1267628305','1267628489'];
+      await board.getByRole('button',{name:/接驳连起来/}).click();
+      await choose(ids[0]);await place();await routes(0);
+      await choose(ids[1]);await page.locator('canvas[data-preview-routes="1"]').waitFor();
+      assert.equal((await saved(campus)).actions.length,1,'preview must not modify the saved plan');
+      await page.getByRole('button',{name:'查看影响全貌 ↗',exact:true}).click();
+      await page.screenshot({path:`test-results/shuttle-${campus}-preview.png`});
+      await place();await routes(1);
+      assert.equal(await board.getByRole('button',{name:'提交本关',exact:true}).isEnabled(),true);
+      await board.getByRole('button',{name:'提交本关',exact:true}).click();
+      if(await page.getByRole('button',{name:'关闭协同发现提示',exact:true}).count())await page.getByRole('button',{name:'关闭协同发现提示',exact:true}).click();
+      await page.getByRole('button',{name:'保存方案 A',exact:true}).click();
+      await page.getByRole('button',{name:'查看影响全貌 ↗',exact:true}).click();
+      await page.getByRole('button',{name:'展开大图',exact:true}).click();
+      await page.getByRole('button',{name:'收起地图校园回声',exact:true}).click();
+      await page.getByRole('button',{name:'隐藏影响',exact:true}).click();
+      await page.screenshot({path:`test-results/shuttle-${campus}-road-route.png`});
+      await page.getByRole('button',{name:'切换俯视地图',exact:true}).click();
+      await page.screenshot({path:`test-results/shuttle-${campus}-road-overview.png`});
+      await page.getByRole('button',{name:'显示影响',exact:true}).click();
+      await page.getByRole('button',{name:'退出大图',exact:true}).click();
+      const complete=await saved(campus);
+      await page.getByRole('button',{name:'移除这栋建筑的接驳站点',exact:true}).click();await routes(0);
+      await page.getByRole('button',{name:'A 留存',exact:true}).click();await routes(1);
+      assert.deepEqual((await saved(campus)).snapshot,complete.snapshot);
+      await page.getByRole('button',{name:'B 当前',exact:true}).click();await routes(0);
+      await page.getByRole('button',{name:'A/B 差异',exact:true}).click();await routes(0);
+      await page.getByRole('button',{name:'退出对照',exact:true}).click();
+      await page.getByRole('button',{name:'在地图撤销上一步',exact:true}).click();await routes(1);
+      assert.deepEqual((await saved(campus)).actions,complete.actions);
+      await page.reload();await routes(1);
+      assert.deepEqual((await saved(campus)).snapshot,complete.snapshot);
+    }
+    const youyi=await saved('youyi');
+    await page.getByRole('button',{name:/长安校区 CHANG.AN/}).click();await routes(1);
+    assert.equal((await saved('changan')).actions.length,2);assert.deepEqual(await saved('youyi'),youyi);
+    await page.setViewportSize({width:390,height:844});await routes(1);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(errors,[]);
+    console.log('PASS: both campuses; isolated stops, route preview, installation, mission completion, A/B isolation, remove/undo, reload, independent saves and mobile; no page errors.');
+  }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

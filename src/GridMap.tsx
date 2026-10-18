@@ -3,6 +3,7 @@ import type {CampusConfig} from './campusTypes';
 import type {ProjectId} from './game';
 import {CELL_SIZE,measure,suitability,placementKey} from './spatial';
 import type {World,Placement,SpatialResult,Cell} from './spatial';
+import {stopPosition} from './roadNetwork';
 
 export type GridLayer='land'|'demand'|'heat'|'runoff'|'benefit';
 const landColor=(c:Cell)=>c.construction?'#b6a28d':c.water>.3?'#8cbac4':c.protected?'#b7c59b':c.roof>.1?'#bbc3c5':c.road?'#ded2b5':c.green>.2?'#93b99b':'#e5e8d9';
@@ -31,9 +32,9 @@ export default function GridMap({config,world,placements,result,layer,tool,selec
           {config.data.waters.map(w=><polygon key={w.id} points={w.points.map(p=>p.join(',')).join(' ')} fill="#84b8c5" fillOpacity=".6" stroke="#6499a7" strokeWidth=".15"/>)}
           {config.data.buildings.map(b=><polygon key={b.id} points={b.points.map(p=>p.join(',')).join(' ')} fill="none" stroke="#46544c" strokeOpacity=".5" strokeWidth=".15"/>)}
           {config.data.roads.map(r=><polyline key={r.id} points={r.points.map(p=>p.join(',')).join(' ')} fill="none" stroke="#fbfbf3" strokeWidth=".4" strokeOpacity=".6"/>)}
-          {result.routes.map((route,i)=><polyline key={i} data-testid="shuttle-route" points={route.map(id=>{const c=world.byId.get(id)!;return `${c.x},${c.z}`;}).join(' ')} fill="none" stroke="#226b88" strokeWidth=".7" strokeDasharray="1 .5"/>)}
+          {result.routes.map((route,i)=><polyline key={i} data-testid="shuttle-route" points={route.points.map(p=>p.join(',')).join(' ')} fill="none" stroke="#226b88" strokeWidth=".7" strokeDasharray="1 .5"/>)}
           {chosen&&!['retrofit','solar'].includes(tool)&&<circle cx={chosen.x} cy={chosen.z} r={CELL_SIZE*(tool==='garden'?3:tool==='shuttle'?2.5:2)} fill="none" stroke="#2c6453" strokeWidth=".18" strokeDasharray=".6 .5"/>}
-          {placements.map((p,i)=>{const c=world.byId.get(p.cellId)!,m=measure(p.projectId),same=placements.filter(q=>q.cellId===p.cellId),offset=same.length>1?(same.findIndex(q=>placementKey(q)===placementKey(p))-(same.length-1)/2)*1.45:0;return <g key={placementKey(p)}><circle cx={c.x+offset} cy={c.z} r={same.length>1?.9:1.45} fill={m.color} stroke="white" strokeWidth=".18"/><text x={c.x+offset} y={c.z+.48} textAnchor="middle" fontSize={same.length>1?1.2:1.7} fill="white" fontWeight="600">{m.symbol}</text><title>{i+1}. {m.name} · {c.name}</title></g>;})}
+          {placements.map((p,i)=>{const c=world.byId.get(p.cellId)!,m=measure(p.projectId),same=placements.filter(q=>q.cellId===p.cellId),offset=same.length>1?(same.findIndex(q=>placementKey(q)===placementKey(p))-(same.length-1)/2)*1.45:0;const [x,z]=p.projectId==='shuttle'?stopPosition(world.transitNetwork,p.cellId)||[c.x,c.z]:[c.x+offset,c.z];return <g key={placementKey(p)}><circle cx={x} cy={z} r={same.length>1?.9:1.45} fill={m.color} stroke="white" strokeWidth=".18"/><text x={x} y={z+.48} textAnchor="middle" fontSize={same.length>1?1.2:1.7} fill="white" fontWeight="600">{m.symbol}</text><title>{i+1}. {m.name} · {c.name}</title></g>;})}
           {selected&&chosen&&<rect x={chosen.x-2} y={chosen.z-2} width="4" height="4" fill="none" stroke="#172e30" strokeWidth=".55"/>}
           {config.landmarks.filter(l=>['云天苑','星天苑','海天苑1号楼','启真湖','启翔湖','公字楼','勇字楼','田径场'].includes(l.name)).map(l=><text key={l.name} x={l.location[0]} y={l.location[1]-2} textAnchor="middle" fontSize={height/65} fill="#3b6053" stroke="#fffff5" strokeWidth={height/350} paintOrder="stroke">{l.name}</text>)}
         </g>

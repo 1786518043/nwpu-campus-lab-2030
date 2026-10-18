@@ -41,9 +41,9 @@ describe('spatial engine: effects depend on geometry and relationships',()=>{
   it('shuttle requires a connected vehicle route; isolated stops and gaps give no service',()=>{
     const stops=[p('shuttle','r3c1'),p('shuttle','r3c8')],single=evaluateSpatial(world,stops.slice(0,1),'normal'),connected=evaluateSpatial(world,stops,'normal');
     expect(single.routes).toEqual([]);expect(single.coverage).toBe(0);expect(connected.routes).toHaveLength(1);
-    expect(connected.routes[0].every(id=>world.byId.get(id)?.vehicleRoad)).toBe(true);
-    const graph=new Map([...world.transitGraph].filter(([id])=>id!=='r3c4').map(([id,ns])=>[id,ns.filter(n=>n!=='r3c4')]));
-    expect(evaluateSpatial({...world,transitGraph:graph},stops,'normal').routes).toEqual([]);
+    expect(connected.routes[0].points.every(p=>p[1]===14)).toBe(true);
+    const broken=createWorld({...config,data:{...config.data,roads:[{id:'west',name:'西段',kind:'service',points:[[2,14],[17,14]]},{id:'east',name:'东段',kind:'service',points:[[19,14],[38,14]]}]}});
+    expect(evaluateSpatial(broken,stops,'normal').routes).toEqual([]);
     expect(connected.routeEnergy).toBeGreaterThan(0);
   });
   it('connected walking and transit create feeder access, while dorms receive noise',()=>{
