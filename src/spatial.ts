@@ -1,6 +1,7 @@
 import type {CampusConfig,CampusId,Building} from './campusTypes';
 import type {EventId,ProjectId} from './game';
 import {EVENTS,parseSaved} from './game';
+import {resolveBudget} from './budget';
 import {boundsOf,pointInside,distanceToSegment} from './mapGeometry';
 import {createRoadNetwork,isVehicleRoad,roadRoute} from './roadNetwork';
 import type {RoadNetwork,RoadRoute} from './roadNetwork';
@@ -113,7 +114,7 @@ export function placementCost(world:World,p:Placement){
 export const shuttleRouteEnergy=(routes:readonly RoadRoute[])=>routes.reduce((sum,r)=>sum+.45+(r.length/CELL_SIZE+1)*.018,0);
 export type Interaction={kind:'positive'|'negative'|'note';name:string;detail:string;cells:string[]};
 export type CellResult={cellId:string;energy:number;heat:number;runoff:number;access:number;comfort:number;initialComfort:number;noise:number;ecology:number;light:number;synergy:number;served:boolean};
-export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId,buildingInput?:{energySavings:Record<string,number>;cost:number;problems:string[]}){
+export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId,buildingInput?:{energySavings:Record<string,number>;cost:number;problems:string[];budget?:number}){
   const placements=[...input].sort((a,b)=>placementKey(a).localeCompare(placementKey(b)));
   const problems:string[]=[...(buildingInput?.problems||[])];const seen=new Set<string>();
   for(const p of placements){const k=placementKey(p),reason=suitability(world,p.projectId,p.cellId);if(reason)problems.push(reason);if(seen.has(k))problems.push('同一网格不能重复实施同一种措施。');seen.add(k);}
@@ -176,7 +177,7 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
   const routeEnergy=shuttleRouteEnergy(routes);totalEnergy+=routeEnergy;
   for(const c of groups.shuttle)if(activeStops.has(c.id)&&world.cells.some(n=>n.dorm>0&&distance(c,n)<2))interactions.push({kind:'negative',name:'接驳站 × 宿舍噪声',detail:'站点运行影响周围宿舍网格；可以后退一格，比较服务覆盖与安静程度的变化。',cells:[c.id]});
   for(const c of groups.lighting)if(world.cells.some(n=>(n.green>.15||n.water>.1)&&distance(c,n)<2))interactions.push({kind:'negative',name:'照明 × 生态光扰动',detail:'光照覆盖绿地或水边产生局部生态扰动，并扣减该地块体验；照明也消耗能源。',cells:[c.id]});
-  const cost=buildingInput?.cost??placements.reduce((n,p)=>n+placementCost(world,p),0),budget=EVENTS.find(e=>e.id===event)!.budget;
+  const cost=buildingInput?.cost??placements.reduce((n,p)=>n+placementCost(world,p),0),budget=resolveBudget(event,buildingInput?.budget);
   const carbon=round(totalEnergy/baselineEnergy*100),baselineCarbon=round(energyMultiplier*100),comfort=round(totalComfort/weight),baselineComfort=round(baseComfort/weight),coverage=round(totalServed/weight*100);
   const reduction=round((1-carbon/baselineCarbon)*100),comfortGain=round(comfort-baselineComfort),feasible=!problems.length&&cost<=budget;
   const fields:InfluenceField[]=[

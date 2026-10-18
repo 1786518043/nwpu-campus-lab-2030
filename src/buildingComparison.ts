@@ -28,8 +28,8 @@ const routeEnergy=(r:SpatialResult)=>shuttleRouteEnergy(r.routes);
 
 // This is a full-plan comparison, not a sum of single-action predictions.
 // The public function owns both evaluations so the event and budget cannot differ.
-export function compareBuildingPlans(context:BuildingContext,actionsA:BuildingAction[],actionsB:BuildingAction[],event:EventId):PlanComparison{
-  const a=evaluateBuildingPlan(context,actionsA,event),b=evaluateBuildingPlan(context,actionsB,event);
+export function compareBuildingPlans(context:BuildingContext,actionsA:BuildingAction[],actionsB:BuildingAction[],event:EventId,explorationBudget?:number):PlanComparison{
+  const a=evaluateBuildingPlan(context,actionsA,event,explorationBudget),b=evaluateBuildingPlan(context,actionsB,event,explorationBudget);
   const aCells=new Map(a.cells.map(c=>[c.cellId,c])),bCells=new Map(b.cells.map(c=>[c.cellId,c]));
   const baselineEnergy=context.world.cells.reduce((s,c)=>s+c.energy,0);
   const aSignatures=new Set(actionsA.map(actionSignature)),bSignatures=new Set(actionsB.map(actionSignature));
@@ -39,7 +39,7 @@ export function compareBuildingPlans(context:BuildingContext,actionsA:BuildingAc
   // caps and interaction with the complete plan without crediting nearby roofs.
   const roofContribution=(actions:BuildingAction[],result:SpatialResult,id:string)=>{
     if(!actions.some(p=>p.buildingId===id&&roofAction(p)))return 0;
-    const without=evaluateBuildingPlan(context,actions.filter(p=>p.buildingId!==id||!roofAction(p)),event);
+    const without=evaluateBuildingPlan(context,actions.filter(p=>p.buildingId!==id||!roofAction(p)),event,explorationBudget);
     return Math.max(0,(energy(without)-energy(result))/baselineEnergy*100);
   };
   const buildings=context.sites.map(site=>{

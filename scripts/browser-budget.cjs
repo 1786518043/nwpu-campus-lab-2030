@@ -1,0 +1,94 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'C:/Users/A/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const url=process.env.CAMPUS_PREVIEW_URL||'http://127.0.0.1:4173/';
+(async()=>{
+  fs.mkdirSync('test-results',{recursive:true});
+  const browser=await chromium.launch({channel:'msedge',headless:true});
+  try{
+    const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'}),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    const board=page.getByRole('region',{name:'校园行动手册'});
+    const form=page.getByRole('form',{name:'自由探索预算'}),input=page.getByRole('spinbutton',{name:'自由探索预算',exact:true});
+    const saved=()=>page.evaluate(()=>({migrated:false,...JSON.parse(localStorage.getItem('campus2030:green:v1'))}));
+    const progress=id=>page.evaluate(id=>JSON.parse(localStorage.getItem(`campus2030:play:v1:${id}`)),id);
+    const budget=async amount=>{await input.fill(String(amount));await form.getByRole('button',{name:'应用预算',exact:true}).click();await form.getByText(`当前共同预算 ${amount} 点`,{exact:true}).waitFor();};
+    const pick=async(id,name)=>{await page.getByLabel('选择建筑',{exact:true}).selectOption(id);await page.locator('.measure-picker').getByRole('button',{name:new RegExp(name)}).click();};
+    const place=name=>page.getByRole('button',{name:`确认配置${name}`,exact:true}).click();
+    await page.goto(url);await board.waitFor();
+    assert.equal(await form.count(),0,'task mode has no custom budget editor');
+    await board.getByRole('button',{name:'自由探索',exact:true}).click();
+    await input.fill('500');assert.equal(await page.getByTestId('remaining').innerText(),'100','draft must not apply');
+    await form.getByRole('button',{name:'应用预算',exact:true}).click();
+    for(const invalid of ['','99','1001','100.5']){
+      await input.fill(invalid);await form.getByRole('button',{name:'应用预算',exact:true}).click();
+      await form.getByRole('alert').waitFor();assert.equal(await page.getByTestId('remaining').innerText(),'500');
+    }
+    await budget(1000);assert.equal(await page.getByTestId('remaining').innerText(),'1000');
+    await budget(500);
+    await pick('362977206','雨水花园');await place('雨水花园');
+    await pick('362977206','慢行路段');await place('慢行路段');
+    if(await page.getByRole('button',{name:'关闭协同发现提示',exact:true}).count())await page.getByRole('button',{name:'关闭协同发现提示',exact:true}).click();
+    const options=await page.getByLabel('选择建筑',{exact:true}).locator('option').evaluateAll(nodes=>nodes.map(n=>n.value).filter(Boolean));
+    for(const id of options){
+      if(Number(await page.getByTestId('remaining').innerText())<350)break;
+      await pick(id,'屋顶光伏');
+      const confirm=page.getByRole('button',{name:'确认配置屋顶光伏',exact:true});
+      if(await confirm.count()&&await confirm.isEnabled())await confirm.click();
+    }
+    const remaining=Number(await page.getByTestId('remaining').innerText()),spent=500-remaining;
+    assert.ok(spent>100&&spent<=500,'must purchase a real plan beyond mission budget');
+    await page.getByRole('button',{name:'保存方案 A',exact:true}).click();
+    const original=await saved();
+    await budget(100);
+    assert.equal(Number(await page.getByTestId('remaining').innerText()),100-spent);
+    assert.equal(await page.getByRole('button',{name:'更新方案 A',exact:true}).isEnabled(),false);
+    await page.getByRole('alert').filter({hasText:'当前 B 超出预算'}).waitFor();
+    assert.deepEqual(await saved(),original,'lowering budget must not erase layout or A');
+    await page.getByRole('button',{name:'A/B 差异',exact:true}).click();
+    const downloadEvent=page.waitForEvent('download');await page.getByRole('button',{name:'导出建筑对照',exact:true}).click();
+    const download=await downloadEvent;await download.saveAs('test-results/budget-export.json');
+    const exported=JSON.parse(fs.readFileSync('test-results/budget-export.json','utf8'));
+    assert.equal(exported.mode,'exploration');assert.equal(exported.budget.effective,100);
+    for(const result of [exported.planA.result,exported.planB.result,exported.buildingComparison.a,exported.buildingComparison.b]){assert.equal(result.budget,100);assert.equal(result.feasible,false);}
+    assert.deepEqual(exported.learning.currentBMissions,[]);
+    assert.equal(exported.learning.progress.discoveries.shade.explorationBudget,500);
+    await budget(500);
+    await board.getByRole('button',{name:'继续任务',exact:true}).click();
+    assert.equal(await form.count(),0);assert.equal(Number(await page.getByTestId('remaining').innerText()),100-spent);
+    assert.equal(await board.getByRole('button',{name:'返回 B 继续任务'}).count(),1);
+    await board.getByRole('button',{name:'返回 B 继续任务'}).click();
+    assert.equal(await board.getByRole('button',{name:'提交本关',exact:true}).isEnabled(),false);
+    await page.getByRole('button',{name:'情境变化',exact:true}).click();
+    await page.getByRole('button',{name:/^预算收紧/}).click();
+    assert.equal(Number(await page.getByTestId('remaining').innerText()),80-spent);
+    await board.getByRole('button',{name:'自由探索',exact:true}).click();
+    assert.equal(await input.inputValue(),'500');assert.equal(Number(await page.getByTestId('remaining').innerText()),500-spent);
+    await page.getByText('自由探索使用手动预算 500 点；返回任务模式后，本情境采用 80 点。',{exact:true}).waitFor();
+    const changan=await saved(),changanPlay=await progress('changan');
+    await page.getByRole('button',{name:/友谊校区 YOUYI/}).click();
+    assert.equal(await form.count(),0);assert.equal(await page.getByTestId('remaining').innerText(),'100');
+    await board.getByRole('button',{name:'自由探索',exact:true}).click();await budget(750);
+    await pick('1267628381','雨水花园');await place('雨水花园');
+    await page.getByRole('button',{name:/长安校区 CHANG.AN/}).click();
+    assert.equal(await input.inputValue(),'500');assert.deepEqual(await saved(),changan);
+    assert.deepEqual(await progress('changan'),changanPlay);
+    await page.reload();await input.waitFor();assert.equal(await input.inputValue(),'500');
+    assert.deepEqual(await saved(),changan);assert.deepEqual((await progress('changan')).completed,{});
+    await page.screenshot({path:'test-results/budget-desktop.png',fullPage:true});
+    await page.setViewportSize({width:320,height:740});await budget(999);
+    await input.scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    const rect=await input.boundingBox();assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=320);
+    await page.locator('.toast').waitFor({state:'hidden'});
+    await form.screenshot({path:'test-results/budget-mobile.png'});
+    await page.getByRole('button',{name:'重新开始实验',exact:true}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'重新开始',exact:true}).click();
+    assert.equal(await page.getByTestId('remaining').innerText(),'999');assert.equal((await saved()).snapshot,null);
+    await page.getByRole('button',{name:'撤销上一步',exact:true}).click();assert.deepEqual((await saved()).actions,changan.actions);
+    await page.getByRole('button',{name:/友谊校区/}).click();assert.equal(await input.inputValue(),'750');
+    assert.equal(await page.getByTestId('remaining').innerText(),'738');
+    assert.deepEqual(errors,[]);
+    console.log('PASS: manual budget 100–1000, invalid/draft inputs, purchases >100, previews, shared A/B/export, lowering budget, task guards, events, reload/campus isolation, discoveries, reset/undo and 320px layout; no page errors.');
+  }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -38,8 +38,8 @@ export function evaluateActionImpact(context:BuildingContext,actions:BuildingAct
   const result:ActionImpact={action,status:reason?'unavailable':installed?'installed':'preview',plan,reason,overBudget:0,buildings:[],ranges:[],routes:[],routeEnergyDelta:0,idleShuttle:false,legacy:!!action.legacyCells};
   if(reason)return result;
   const shown=evaluated||evaluateBuildingPlan(context,actions,event);
-  const before=installed?evaluateBuildingPlan(context,actions.filter(a=>actionKey(a)!==actionKey(action)),event):shown;
-  const after=installed?shown:evaluateBuildingPlan(context,[...actions,action],event);
+  const before=installed?evaluateBuildingPlan(context,actions.filter(a=>actionKey(a)!==actionKey(action)),event,shown.budget):shown;
+  const after=installed?shown:evaluateBuildingPlan(context,[...actions,action],event,shown.budget);
   result.overBudget=Math.max(0,-after.remaining);
   const oldFields=new Map(before.fields.map(f=>[`${f.kind}@${f.cellId}`,f.strength]));
   result.ranges=after.fields.filter(f=>Math.abs(f.strength-(oldFields.get(`${f.kind}@${f.cellId}`)||0))>1e-8);

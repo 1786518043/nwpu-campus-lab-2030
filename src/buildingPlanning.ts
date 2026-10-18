@@ -101,7 +101,7 @@ export function actionReason(context:BuildingContext,a:BuildingAction,existing:B
   }
   return null;
 }
-export function evaluateBuildingPlan(context:BuildingContext,actions:BuildingAction[],event:EventId){
+export function evaluateBuildingPlan(context:BuildingContext,actions:BuildingAction[],event:EventId,explorationBudget?:number){
   const inputs=new Map<string,Placement>(),problems:string[]=[],energySavings:Record<string,number>={};
   const ordered=[...actions].sort((a,b)=>actionKey(a).localeCompare(actionKey(b))),seen:BuildingAction[]=[];
   for(const a of ordered){
@@ -117,14 +117,14 @@ export function evaluateBuildingPlan(context:BuildingContext,actions:BuildingAct
       energySavings[f.cellId]=(energySavings[f.cellId]||0)+initial-afterSolar;
     }
   }
-  const result=evaluateSpatial(context.world,[...inputs.values()],event,{energySavings,cost:actions.reduce((s,a)=>s+actionCost(context,a),0),problems});
+  const result=evaluateSpatial(context.world,[...inputs.values()],event,{energySavings,cost:actions.reduce((s,a)=>s+actionCost(context,a),0),problems,budget:explorationBudget});
   for(const site of context.sites)if(actions.some(a=>a.buildingId===site.id&&a.projectId==='solar')&&actions.some(a=>a.buildingId===site.id&&a.projectId==='retrofit'))result.interactions.push({kind:'note',name:'节能 × 光伏共同上限',detail:'整栋建筑先减少用能，再用屋顶光伏抵扣剩余用能；相邻建筑分别计算，不重复抵扣。',cells:site.footprint.map(f=>f.cellId)});
   return result;
 }
-export function addBuildingAction(context:BuildingContext,state:BuildingState,a:BuildingAction){
+export function addBuildingAction(context:BuildingContext,state:BuildingState,a:BuildingAction,explorationBudget?:number){
   const error=actionReason(context,a,state.actions);if(error)return {state,error};
   const next={...state,actions:[...state.actions,a]};
-  if(!evaluateBuildingPlan(context,next.actions,state.event).feasible)return {state,error:'预算不足，请先移除其他投入或选择另一栋建筑。'};
+  if(!evaluateBuildingPlan(context,next.actions,state.event,explorationBudget).feasible)return {state,error:'预算不足，请先移除其他投入或选择另一栋建筑。'};
   return {state:next,error:undefined};
 }
 export function nearestSite(context:BuildingContext,cellId:string){

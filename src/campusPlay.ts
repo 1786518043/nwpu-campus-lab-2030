@@ -6,6 +6,7 @@ import {BUILDING_VERSION,actionCells,evaluateBuildingPlan,readBuildingState} fro
 import {buildingExposure} from './buildingImpact';
 import type {CellResult,SpatialResult} from './spatial';
 import {CELL_SIZE} from './spatial';
+import {DEFAULT_EXPLORATION_BUDGET,isExplorationBudget,resolveBudget} from './budget';
 
 export const PLAY_VERSION=1;
 export type MissionId='cool'|'shade'|'connect'|'balance';
@@ -41,9 +42,10 @@ const STARTS:Record<CampusId,Record<MissionId,BuildingAction[]>>={
 };
 export const missionStarts=(context:BuildingContext,id:MissionId)=>STARTS[context.config.id][id].filter(a=>context.byId.has(a.buildingId));
 export const playStorageKey=(id:CampusId)=>`campus2030:play:v1:${id}`;
-export type PlayEvidence={at:string;event:EventId;rulesVersion:string;actions:BuildingAction[]};
-export type PlayProgress={version:1;campusId:CampusId;activeMission:MissionId|null;completed:Partial<Record<MissionId,PlayEvidence>>;discoveries:Partial<Record<DiscoveryId,PlayEvidence>>};
-export const emptyPlayProgress=(id:CampusId):PlayProgress=>({version:PLAY_VERSION,campusId:id,activeMission:'cool',completed:{},discoveries:{}});
+export type PlayEvidence={at:string;event:EventId;rulesVersion:string;actions:BuildingAction[];explorationBudget?:number};
+export type PlayProgress={version:1;campusId:CampusId;activeMission:MissionId|null;explorationBudget:number;completed:Partial<Record<MissionId,PlayEvidence>>;discoveries:Partial<Record<DiscoveryId,PlayEvidence>>};
+export const emptyPlayProgress=(id:CampusId):PlayProgress=>({version:PLAY_VERSION,campusId:id,activeMission:'cool',explorationBudget:DEFAULT_EXPLORATION_BUDGET,completed:{},discoveries:{}});
+export const planBudgetOverride=(progress:PlayProgress)=>progress.activeMission===null?(isExplorationBudget(progress.explorationBudget)?progress.explorationBudget:DEFAULT_EXPLORATION_BUDGET):undefined;
 export type MissionGoal={label:string;detail:string;met:boolean;ratio:number};
 export type MissionStatus={id:MissionId;goals:MissionGoal[];ready:boolean};
 export type ActiveDiscovery={id:DiscoveryId;buildingIds:string[]};
@@ -86,15 +88,17 @@ export function evaluateMissions(context:BuildingContext,actions:BuildingAction[
   };
   return MISSIONS.map(m=>{const checks=[...goals[m.id],feasible];return {id:m.id,goals:checks,ready:checks.every(g=>g.met)};});
 }
-const evidence=(state:BuildingState,at:string):PlayEvidence=>({at,event:state.event,rulesVersion:BUILDING_VERSION,actions:structuredClone(state.actions)});
+const evidence=(state:BuildingState,at:string,explorationBudget?:number):PlayEvidence=>({at,event:state.event,rulesVersion:BUILDING_VERSION,actions:structuredClone(state.actions),...(explorationBudget===undefined?{}:{explorationBudget})});
 export function discoverFromPlan(progress:PlayProgress,context:BuildingContext,state:BuildingState,result:SpatialResult,at:string):PlayProgress{
   if(progress.campusId!==state.campusId||state.campusId!==context.config.id||!result.feasible)return progress;
+  const budget=planBudgetOverride(progress);
+  if(result.budget!==resolveBudget(state.event,budget))return progress;
   const fresh=activeDiscoveries(context,state.actions,result).filter(d=>!progress.discoveries[d.id]);
   if(!fresh.length)return progress;
-  return {...progress,discoveries:{...progress.discoveries,...Object.fromEntries(fresh.map(d=>[d.id,evidence(state,at)]))}};
+  return {...progress,discoveries:{...progress.discoveries,...Object.fromEntries(fresh.map(d=>[d.id,evidence(state,at,budget)]))}};
 }
 export function completeMission(progress:PlayProgress,context:BuildingContext,state:BuildingState,id:MissionId,at:string):PlayProgress{
-  if(progress.campusId!==state.campusId||context.config.id!==state.campusId)return progress;
+  if(progress.activeMission===null||progress.campusId!==state.campusId||context.config.id!==state.campusId)return progress;
   const result=evaluateBuildingPlan(context,state.actions,state.event),baseline=evaluateBuildingPlan(context,[],state.event);
   if(!evaluateMissions(context,state.actions,result,baseline).find(m=>m.id===id)?.ready)return progress;
   return {...progress,completed:{...progress.completed,[id]:evidence(state,at)}};
@@ -108,19 +112,20 @@ export function readPlayProgress(raw:string|null,context:BuildingContext):PlayPr
     const data=JSON.parse(raw||'null');
     if(!data||data.version!==PLAY_VERSION||data.campusId!==context.config.id)return empty;
     const activeMission=data.activeMission===null?null:MISSIONS.find(m=>m.id===data.activeMission)?.id||'cool';
-    const readEvidence=(item:unknown):{record:PlayEvidence;state:BuildingState;result:SpatialResult}|null=>{
+    const readEvidence=(item:unknown,allowExploration=false):{record:PlayEvidence;state:BuildingState;result:SpatialResult}|null=>{
       if(!item||typeof item!=='object')return null;
       const e=item as PlayEvidence;
+      if(e.explorationBudget!==undefined&&(!allowExploration||!isExplorationBudget(e.explorationBudget)))return null;
       if(typeof e.at!=='string'||!Number.isFinite(Date.parse(e.at))||e.rulesVersion!==BUILDING_VERSION||!EVENTS.some(x=>x.id===e.event)||!Array.isArray(e.actions)||!e.actions.length)return null;
       const state=readBuildingState(JSON.stringify({version:3,rulesVersion:e.rulesVersion,campusId:context.config.id,event:e.event,actions:e.actions,snapshot:null}),context);
       if(!state.actions.length)return null;
-      const result=evaluateBuildingPlan(context,state.actions,state.event);
-      return result.feasible?{record:evidence(state,e.at),state,result}:null;
+      const result=evaluateBuildingPlan(context,state.actions,state.event,e.explorationBudget);
+      return result.feasible?{record:evidence(state,e.at,e.explorationBudget),state,result}:null;
     };
     const completed:PlayProgress['completed']={},discoveries:PlayProgress['discoveries']={};
     for(const m of MISSIONS){const e=readEvidence(data.completed?.[m.id]);if(e&&evaluateMissions(context,e.state.actions,e.result,evaluateBuildingPlan(context,[],e.state.event)).find(s=>s.id===m.id)?.ready)completed[m.id]=e.record;}
-    for(const d of DISCOVERIES){const e=readEvidence(data.discoveries?.[d.id]);if(e&&activeDiscoveries(context,e.state.actions,e.result).some(a=>a.id===d.id))discoveries[d.id]=e.record;}
-    return {...empty,activeMission,completed,discoveries};
+    for(const d of DISCOVERIES){const e=readEvidence(data.discoveries?.[d.id],true);if(e&&activeDiscoveries(context,e.state.actions,e.result).some(a=>a.id===d.id))discoveries[d.id]=e.record;}
+    return {...empty,activeMission,explorationBudget:isExplorationBudget(data.explorationBudget)?data.explorationBudget:DEFAULT_EXPLORATION_BUDGET,completed,discoveries};
   }catch{return empty;}
 }
 
@@ -135,7 +140,7 @@ export function campusVoices(context:BuildingContext,actions:BuildingAction[],ev
   if(n.access>=.01)add('access','虚拟同学 · 日常通勤','positive','楼旁的出行条件有改善，试着沿地图看看哪些路和站点连起来了。',`周边出行便利提高 ${n.access.toFixed(2)} 点`);
   else if(n.light>=.01)add('light','虚拟同学 · 晚间活动','positive','这附近的夜间照明带来了体验改善，也想知道它会不会打扰周围。',`周边夜间体验增益 ${n.light.toFixed(2)} 点`);
   if(!voices.length&&actions.some(a=>a.buildingId===site.id&&['solar','retrofit'].includes(a.projectId))){
-    const without=evaluateBuildingPlan(context,actions.filter(a=>a.buildingId!==site.id||!['solar','retrofit'].includes(a.projectId)),event);
+    const without=evaluateBuildingPlan(context,actions.filter(a=>a.buildingId!==site.id||!['solar','retrofit'].includes(a.projectId)),event,result.budget);
     const saving=without.carbon-result.carbon;
     if(saving>=.01)add('energy','虚拟职工 · 后勤维护','positive','这栋楼的屋顶或节能改造贡献了减排，我们可以再看看周边体验怎么改善。',`本栋改造边际贡献约 ${saving.toFixed(2)} 个全校排放指数点`);
   }
