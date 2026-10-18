@@ -7,6 +7,7 @@ import type {World,Placement,SpatialResult,Cell} from './spatial';
 export type GridLayer='land'|'demand'|'heat'|'runoff'|'benefit';
 const landColor=(c:Cell)=>c.construction?'#b6a28d':c.water>.3?'#8cbac4':c.protected?'#b7c59b':c.roof>.1?'#bbc3c5':c.road?'#ded2b5':c.green>.2?'#93b99b':'#e5e8d9';
 function ramp(value:number){const t=Math.max(0,Math.min(1,value));return `rgb(${Math.round(83+159*t)},${Math.round(158-59*t)},${Math.round(142-65*t)})`;}
+function benefitColor(value:number){const neutral=[238,239,224],target=value<0?[213,108,84]:[83,158,142],t=Math.min(1,Math.abs(value)/(value<0?8:12));return `rgb(${neutral.map((n,i)=>Math.round(n+(target[i]-n)*t)).join(',')})`;}
 export default function GridMap({config,world,placements,result,layer,tool,selected,onSelect,showSuitable,readOnly=false}:{config:CampusConfig;world:World;placements:Placement[];result:SpatialResult;layer:GridLayer;tool:ProjectId;selected:string|null;onSelect:(id:string)=>void;showSuitable:boolean;readOnly?:boolean}){
   const b=world.bounds,[zoom,setZoom]=useState(1),[pan,setPan]=useState({x:b.cx,z:b.cz});
   const drag=useRef<{x:number;y:number;pan:{x:number;z:number};moved:boolean}|null>(null);
@@ -16,7 +17,7 @@ export default function GridMap({config,world,placements,result,layer,tool,selec
   const chosen=selected?world.byId.get(selected):null;
   const svgId=`clip-${config.id}`;
   function magnify(factor:number){setZoom(z=>Math.max(1,Math.min(5,z*factor)));if(chosen)setPan({x:chosen.x,z:chosen.z});}
-  function fill(c:Cell){const r=cellResults.get(c.id)!;if(layer==='land')return landColor(c);if(layer==='demand')return ramp(c.demand);if(layer==='heat')return ramp(r.heat);if(layer==='runoff')return ramp(r.runoff);return ramp(1-Math.max(0,r.comfort-r.initialComfort)/12);}
+  function fill(c:Cell){const r=cellResults.get(c.id)!;if(layer==='land')return landColor(c);if(layer==='demand')return ramp(c.demand);if(layer==='heat')return ramp(r.heat);if(layer==='runoff')return ramp(r.runoff);return benefitColor(r.comfort-r.initialComfort);}
   return <div className="grid-map">
     <div className="grid-topline"><span><i/>40 m 教学网格 · {world.cells.length} 格</span><strong>N ↑</strong></div>
     <svg ref={svg} className="planning-svg" aria-label={`${config.name}空间规划地图`} role="group" viewBox={`${pan.x-width/2} ${pan.z-height/2} ${width} ${height}`}
@@ -40,7 +41,7 @@ export default function GridMap({config,world,placements,result,layer,tool,selec
       <polygon points={config.data.boundary.map(p=>p.join(',')).join(' ')} fill="none" stroke="#82967f" strokeWidth=".22" pointerEvents="none"/>
     </svg>
     <div className="grid-zoom"><button onClick={()=>magnify(1.4)} aria-label="放大规划地图">＋</button><button onClick={()=>magnify(1/1.4)} aria-label="缩小规划地图">−</button><button onClick={()=>{setZoom(1);setPan({x:b.cx,z:b.cz});}}>全校</button><button disabled={!chosen} onClick={()=>{if(chosen){setZoom(3);setPan({x:chosen.x,z:chosen.z});}}}>选址近看</button></div>
-    <div className="grid-legend">{layer==='land'?<><span>■ 建筑</span><span className="legend-green">■ 绿地</span><span className="legend-water">■ 水体</span><span>保护球场 / 施工区不可占用</span></>:<><span>低</span><i/><span>高</span><span>{layer==='benefit'?'绿色表示改善较大':'教学代理指标，非实测'}</span></>}</div>
+    <div className="grid-legend">{layer==='land'?<><span>■ 建筑</span><span className="legend-green">■ 绿地</span><span className="legend-water">■ 水体</span><span>保护球场 / 施工区不可占用</span></>:layer==='benefit'?<><span>变差</span><i style={{background:'linear-gradient(90deg,#d56c54,#eeefe0,#539e8e)'}}/><span>改善</span><span>浅色表示无变化 · 相对同情境空白方案</span></>:<><span>低</span><i/><span>高</span><span>教学代理指标，非实测</span></>}</div>
     <div className="grid-footnote">{readOnly?'正在查看方案 A · 点击仅查看地块':'点选网格 → 预览效果 → 确认实施'} · 拖动平移 · 方向键移动选区</div>
   </div>;
 }
