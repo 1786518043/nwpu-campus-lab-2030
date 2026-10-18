@@ -112,9 +112,9 @@ function roadPath(world:World,from:string,to:string):string[]|null {
 }
 export type Interaction={kind:'positive'|'negative'|'note';name:string;detail:string;cells:string[]};
 export type CellResult={cellId:string;energy:number;heat:number;runoff:number;access:number;comfort:number;initialComfort:number;noise:number;ecology:number;served:boolean};
-export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId){
+export function evaluateSpatial(world:World,input:readonly Placement[],event:EventId,buildingInput?:{energySavings:Record<string,number>;cost:number;problems:string[]}){
   const placements=[...input].sort((a,b)=>placementKey(a).localeCompare(placementKey(b)));
-  const problems:string[]=[];const seen=new Set<string>();
+  const problems:string[]=[...(buildingInput?.problems||[])];const seen=new Set<string>();
   for(const p of placements){const k=placementKey(p),reason=suitability(world,p.projectId,p.cellId);if(reason)problems.push(reason);if(seen.has(k))problems.push('同一网格不能重复实施同一种措施。');seen.add(k);}
   const valid=placements.filter((p,i)=>!suitability(world,p.projectId,p.cellId)&&placements.findIndex(q=>placementKey(q)===placementKey(p))===i);
   const groups=Object.fromEntries(MEASURES.map(m=>[m.id,valid.filter(p=>p.projectId===m.id).map(p=>world.byId.get(p.cellId)!)])) as Record<ProjectId,Cell[]>;
@@ -160,6 +160,7 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
     let energy=c.energy*energyMultiplier;
     if(seen.has(`retrofit@${c.id}`))energy*=event==='heat'?.55:.65;
     if(seen.has(`solar@${c.id}`))energy=Math.max(0,energy-c.energy*.8*c.sun*(event==='rain'?.42:event==='heat'?.92:1));
+    energy=Math.max(0,energy-(buildingInput?.energySavings[c.id]||0));
     energy=Math.max(0,energy-c.demand*(walk*.09+transit*.18)*(1-walk*transit*.3));
     energy+=light*.012;
     const initialComfort=50-(event==='heat'?initialHeat*11:0)-(event==='rain'?initialRunoff*13:0);
@@ -173,7 +174,7 @@ export function evaluateSpatial(world:World,input:readonly Placement[],event:Eve
   const routeEnergy=routes.reduce((s,path)=>s+.45+path.length*.018,0);totalEnergy+=routeEnergy;
   for(const c of groups.shuttle)if(activeStops.has(c.id)&&world.cells.some(n=>n.dorm>0&&distance(c,n)<2))interactions.push({kind:'negative',name:'接驳站 × 宿舍噪声',detail:'站点运行影响周围宿舍网格；可以后退一格，比较服务覆盖与安静程度的变化。',cells:[c.id]});
   for(const c of groups.lighting)if(world.cells.some(n=>(n.green>.15||n.water>.1)&&distance(c,n)<2))interactions.push({kind:'negative',name:'照明 × 生态光扰动',detail:'光照覆盖绿地或水边产生局部生态扰动，并扣减该地块体验；照明也消耗能源。',cells:[c.id]});
-  const cost=placements.reduce((n,p)=>n+placementCost(world,p),0),budget=EVENTS.find(e=>e.id===event)!.budget;
+  const cost=buildingInput?.cost??placements.reduce((n,p)=>n+placementCost(world,p),0),budget=EVENTS.find(e=>e.id===event)!.budget;
   const carbon=round(totalEnergy/baselineEnergy*100),baselineCarbon=round(energyMultiplier*100),comfort=round(totalComfort/weight),baselineComfort=round(baseComfort/weight),coverage=round(totalServed/weight*100);
   const reduction=round((1-carbon/baselineCarbon)*100),comfortGain=round(comfort-baselineComfort),feasible=!problems.length&&cost<=budget;
   return {cost,budget,remaining:budget-cost,carbon,comfort,coverage,reduction,comfortGain,baselineCarbon,baselineComfort,heat:round(totalHeat/weight*100),runoff:round(totalRunoff/weight*100),baselineHeat:round(baselineHeat/weight*100),baselineRunoff:round(baselineRunoff/weight*100),ecology:round(totalEcology/weight*100),routeEnergy:round(routeEnergy),feasible,problems,success:feasible&&reduction>=2&&comfortGain>=1&&coverage>=12,cells,interactions,routes};
