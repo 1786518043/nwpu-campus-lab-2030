@@ -1,0 +1,53 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'C:/Users/A/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('node:fs');
+fs.mkdirSync('test-results',{recursive:true});
+(async()=>{
+  const browser=await chromium.launch({channel:'msedge',headless:true});
+  try{
+    const page=await browser.newPage({viewport:{width:1440,height:1050},deviceScaleFactor:1});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto('http://127.0.0.1:5173/');
+    await page.locator('canvas').waitFor();
+    await page.waitForTimeout(1200);
+    await page.screenshot({path:'test-results/desktop-initial.png',fullPage:true});
+    const metric=async(id,value)=>{const found=await page.getByTestId(id).innerText();if(found!==String(value))throw new Error(`${id}: ${found} != ${value}`);};
+    await metric('remaining',100);
+    for(const name of ['建筑节能改造','绿色接驳线路','步行与骑行改善','按需智能照明'])await page.getByRole('button',{name:'加入'+name,exact:true}).click();
+    await metric('remaining',0);await metric('carbon',52);await metric('comfort',86);
+    await page.getByRole('button',{name:'加入屋顶光伏试点',exact:true}).click();
+    if(!(await page.getByRole('alert').filter({hasText:'预算不足'}).isVisible()))throw new Error('Overspend error missing');
+    await page.getByRole('button',{name:'关闭提示',exact:true}).click();
+    await page.getByRole('button',{name:'保存为方案 A',exact:true}).click();
+    await page.getByRole('tab',{name:'02 情境变化'}).click();
+    await page.getByRole('button',{name:/持续高温 环境考验/}).click();
+    await metric('carbon',59);
+    await page.getByRole('button',{name:/连续降雨 环境考验/}).click();
+    await metric('comfort',82);
+    await page.getByRole('button',{name:/预算收紧 资源考验/}).click();
+    await metric('remaining',-20);
+    await page.getByRole('tab',{name:'01 选择措施'}).click();
+    await page.getByRole('button',{name:'移除步行与骑行改善',exact:true}).click();
+    await metric('remaining',0);await metric('carbon',58);await metric('comfort',76);
+    await page.getByRole('tab',{name:'03 A/B 对照'}).click();
+    await page.getByText('A：超出当前预算',{exact:true}).waitFor();
+    await page.getByText('B：达成本关目标',{exact:true}).waitFor();
+    await page.screenshot({path:'test-results/desktop-comparison.png',fullPage:true});
+    await page.reload();await metric('remaining',0);await metric('carbon',58);
+    await page.getByRole('button',{name:'地图来源与精度 ↗'}).click();
+    await page.getByRole('dialog').waitFor();
+    const imageOK=await page.locator('.source-map').evaluate(img=>img.complete&&img.naturalWidth>0);
+    if(!imageOK){await page.locator('.source-map').evaluate(img=>new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;}));}
+    await page.getByRole('button',{name:'关闭弹窗'}).click();
+    await page.getByRole('button',{name:'重新开始实验'}).click();
+    await page.getByRole('button',{name:'重新开始',exact:true}).click();await metric('remaining',100);
+    await page.getByRole('button',{name:'撤销上一步'}).click();await metric('remaining',0);
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForTimeout(600);
+    if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Mobile horizontal overflow');
+    await page.screenshot({path:'test-results/mobile.png',fullPage:true});
+    await page.getByRole('button',{name:'加入雨水花园与绿荫',exact:true}).click();
+    if(!(await page.getByRole('alert').filter({hasText:'预算不足'}).isVisible()))throw new Error('Mobile interaction failed');
+    if(errors.length)throw new Error(errors.join('\n'));
+    console.log('PASS: WebGL, project choices, budget rejection, A snapshot, all event calculations, same-event comparison, persistence, source image, reset/undo, mobile layout and interaction; no page errors.');
+  } finally {await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

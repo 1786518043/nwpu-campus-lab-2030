@@ -1,0 +1,22 @@
+{
+  "referenceImage": "/reference/nwpu-changan-official-map-preview.jpg",
+  "referenceSize": [1024, 1213],
+  "orientation": "north-up; east-right",
+  "coordinateConvention": "normalized image coordinates, x right/y down; approximate manual readings, not geospatial coordinates",
+  "confidenceNote": "Positions identify approximate named complexes by comparison of two official maps; footprints and heights are not surveyed.",
+  "landmarks": [
+    {"id":"library","name":"图书馆","centerPx":[438,465],"center":[0.4277,0.3833],"shape":"Northern wing of central circular complex; broad eastward axial entrance","guideNumber":16},
+    {"id":"qizhen","name":"启真楼","centerPx":[407,503],"center":[0.3975,0.4147],"shape":"Southern wing of central circular complex","guideNumber":15,"identityConfidence":"approximate cross-map match"},
+    {"id":"teaching-east","name":"教学东楼","centerPx":[483,360],"center":[0.4717,0.2968],"boundsPx":[447,325,522,394],"shape":"Central square courtyard plus northwest and southeast courtyard wings, hooked southwest annex","guideNumber":25},
+    {"id":"teaching-west","name":"教学西楼","centerPx":[351,428],"center":[0.3428,0.3528],"shape":"Multiple connected wings; use existing OSM A/B/C/D polygons","guideNumber":22},
+    {"id":"qixiang","name":"启翔楼","centerPx":[421,810],"center":[0.4111,0.6678],"boundsPx":[391,785,455,836],"shape":"Courtyard enclosed mainly on north/east/south, thin west corridor and west pavilion","guideNumber":3},
+    {"id":"haitian-building","name":"海天苑大楼","centerPx":[404,657],"center":[0.3945,0.5416],"boundsPx":[363,599,446,708],"shape":"Long north-south multicourtyard cluster with eastern and western wings","guideNumber":8,"caution":"OSM feature is a construction area, not a verified current footprint"},
+    {"id":"yuntian-dorms","name":"云天苑学生公寓","centerPx":[480,220],"center":[0.4688,0.1814],"shape":"Repeated courtyard and bar-shaped dormitory blocks","guideNumber":35},
+    {"id":"xingtian-dorms","name":"星天苑学生公寓","centerPx":[253,239],"center":[0.2471,0.1970],"shape":"Repeated north-south grouped dormitory blocks","guideNumber":40},
+    {"id":"haitian-dorms","name":"海天苑学生公寓","centerPx":[254,766],"center":[0.2480,0.6315],"shape":"Dormitory group west of southern lake","guideNumber":7},
+    {"id":"gym","name":"翱翔体育馆","centerPx":[560,273],"center":[0.5469,0.2251],"shape":"Large multi-part gym hall near northeast student athletics field","guideNumber":32},
+    {"id":"pool","name":"翱翔游泳馆","centerPx":[266,470],"center":[0.2598,0.3875],"shape":"Rounded southern edge of covered pool hall","guideNumber":18},
+    {"id":"qizhen-lake","name":"启真湖","centerPx":[454,530],"center":[0.4434,0.4369],"shape":"Narrow north-south water system around central library complex"},
+    {"id":"qixiang-lake","name":"启翔湖","centerPx":[350,812],"center":[0.3418,0.6694],"shape":"Large southern lake immediately west of 启翔楼"}
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "auditDate": "2026-10-18",
+  "coordinateSystem": "Existing scene coordinates; one unit approximately 10 m; north is -z",
+  "accuracy": "Neighbour relationships cross-checked against official photos and renderings. Footprints are manually approximated within those parcels, not surveyed or cadastral coordinates.",
+  "buildings": [
+    {
+      "id": "official-haitian-block4", "name": "海天苑4号楼（三期）", "kind": "dorm", "height": 2.2, "levels": 6,
+      "modelStyle": "haitian-dorm", "status": "in-use",
+      "source": "校方2022年可研效果图、2026年移交航拍交叉定位",
+      "positionNote": "位于1号楼北侧、留学生公寓西侧；相邻关系经图像核对，占地轮廓与立面按照片近似复原。",
+      "statusNote": "已投用 · 2026年8月21日学生入住，9月3日移交；地上6层。",
+      "heightSource": "地上6层为校方披露；层高和连接体高度示意",
+      "evidence": [
+        {"label":"2026年移交实景与楼号", "url":"https://jijian.nwpu.edu.cn/info/1059/8633.htm", "image":"/reference/changan-south/phase3-2026-21.jpg"},
+        {"label":"2022年可研总览效果图", "url":"https://fazhan.nwpu.edu.cn/info/1321/6031.htm", "image":"/reference/changan-south/phase3-location-2022-feasibility.jpg"}
+      ],
+      "rectParts": [
+        {"rect":[-48.8,0.2,-39.2,1.8],"height":2.2,"role":"北侧六层主楼翼"},
+        {"rect":[-48.8,5.8,-39.2,7.4],"height":2.2,"role":"南侧六层主楼翼"},
+        {"rect":[-48.8,1.8,-47.75,5.8],"height":0.75,"role":"西侧低层连接体"},
+        {"rect":[-40.25,1.8,-39.2,5.8],"height":0.75,"role":"东侧低层连接体"}
+      ]
+    },
+    {
+      "id":"official-haitian-phase4", "name":"海天苑学生宿舍（四期）", "kind":"dorm", "height":2.2,
+      "modelStyle":"construction", "status":"under-construction",
+      "source":"校方四期封顶报道、现场照片与设计效果图",
+      "positionNote":"二期西侧原农场地块；四条主楼翼东西向、沿南北排列。占地边线与施工设施位置为近似示意。",
+      "statusNote":"在建 · 2026年8月18日主体封顶，按封顶后施工阶段表现；非竣工状态。",
+      "heightSource":"按现场照片与效果图简化楼层体量；非实测高度",
+      "evidence":[
+        {"label":"2026年8月封顶实景", "url":"https://jijian.nwpu.edu.cn/info/1059/8543.htm", "image":"/reference/changan-south/phase4-2026-19.jpg"},
+        {"label":"楼翼布局参考（设计效果图）", "url":"https://jijian.nwpu.edu.cn/info/1059/8543.htm", "image":"/reference/changan-south/phase4-2026-22.jpg"},
+        {"label":"校方公布的建设进度", "url":"https://jijian.nwpu.edu.cn/info/1052/7873.htm"}
+      ],
+      "rectParts":[
+        {"rect":[-48.65,28.4,-39.0,30.15],"height":2.2,"role":"北侧主楼翼"},
+        {"rect":[-48.65,33.7,-39.0,35.45],"height":2.2,"role":"第二主楼翼"},
+        {"rect":[-48.65,39.0,-39.0,40.75],"height":2.2,"role":"第三主楼翼"},
+        {"rect":[-48.65,44.3,-39.0,46.05],"height":2.2,"role":"南侧主楼翼"},
+        {"rect":[-48.65,30.15,-46.95,33.7],"height":1.05,"role":"西侧连接体"},
+        {"rect":[-48.65,35.45,-46.95,39.0],"height":1.05,"role":"西侧连接体"},
+        {"rect":[-48.65,40.75,-46.95,44.3],"height":1.05,"role":"西侧连接体"},
+        {"rect":[-39.85,30.15,-39.0,33.7],"height":0.7,"role":"东侧连接体"},
+        {"rect":[-39.85,35.45,-39.0,39.0],"height":0.7,"role":"东侧连接体"},
+        {"rect":[-39.85,40.75,-39.0,44.3],"height":0.7,"role":"东侧连接体"}
+      ]
+    },
+    {
+      "id":"official-haitian-food-plaza", "name":"海天苑美食广场", "kind":"dining", "height":0.46,
+      "modelStyle":"glass-pavilion", "status":"in-use", "levels":1,
+      "source":"后勤部门2024年开业报道与改造前后照片",
+      "positionNote":"海天苑餐厅北侧原绿化带；保留既有通行带，补入单层玻璃餐饮空间，边线与退距为近似。",
+      "statusNote":"已开放 · 2024年11月15日启用；校方披露新增412个餐位。",
+      "heightSource":"单层玻璃体量按照片示意，非实测尺寸",
+      "evidence":[
+        {"label":"开业报道与改造前后照片", "url":"https://houqin.nwpu.edu.cn/info/1011/230241.htm", "image":"/reference/changan-south/canteen-extension-2024.png"},
+        {"label":"校方明确注明餐厅北面", "url":"https://houqin.nwpu.edu.cn/info/1241/228551.htm"}
+      ],
+      "polygon":[[-35.35,13.9],[-26.75,14.18],[-26.79,15.4],[-35.39,15.12],[-35.35,13.9]]
+    }
+  ],
+  "constructionSite":{"id":"official-haitian-phase4-site","name":"海天苑四期施工区","kind":"construction","points":[[-49.05,27.8],[-38.65,27.8],[-38.65,46.7],[-49.05,46.7],[-49.05,27.8]],"source":"二期西侧原农场地块；围挡边界和临设位置示意"}
+}

@@ -1,0 +1,26 @@
+{
+  "removed": [
+    {
+      "id": "1553568695",
+      "name": "机电楼",
+      "reason": "footprint outside verified display parcel"
+    }
+  ],
+  "merged": [
+    {
+      "id": "r14477260-0",
+      "sourceMembers": 13,
+      "resultFootprints": 1
+    },
+    {
+      "id": "r14477262-0",
+      "sourceMembers": 3,
+      "resultFootprints": 1
+    }
+  ],
+  "buildings": 55,
+  "outsideGround": [],
+  "overlaps": [],
+  "sportsBuildingConflicts": [],
+  "newBuildingRoadConflicts": []
+}

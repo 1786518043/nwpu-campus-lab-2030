@@ -1,0 +1,153 @@
+{
+  "name": "海天苑4号楼（三期）",
+  "retrieved": "2026-10-18",
+  "resultType": "manual-adjacency-location; not a photogrammetric registration",
+  "confidence": {
+    "identity": "high: official handover photo shows building sign",
+    "relativeLocation": "medium-high: two independent dated university image sets and OSM neighbor topology agree",
+    "metricFootprint": "not established"
+  },
+  "projection": {
+    "x": "(longitude-108.7601)*9229",
+    "z": "-(latitude-34.0298)*11132",
+    "sceneUnitMetersApprox": 10
+  },
+  "candidateSiteEnvelope": {
+    "x": [
+      -49,
+      -38
+    ],
+    "z": [
+      0,
+      8
+    ],
+    "center": [
+      -43.5,
+      4
+    ],
+    "warning": "Approximate siting envelope, not measured footprint, parcel boundary or occupied area"
+  },
+  "footprint": null,
+  "relations": [
+    "north of Haitian dormitory group 1",
+    "west of international student dormitory r14477262",
+    "two main east-west wings with low connectors and courtyard",
+    "NOT the old small sports pitch w1087520407; NOT the old planned oval track itself"
+  ],
+  "observedNeighbors": [
+    {
+      "label": "A",
+      "name": "留学生公寓",
+      "osm": "relation/14477262",
+      "sceneBounds": {
+        "x": [
+          -37.654,
+          -26.533
+        ],
+        "z": [
+          -0.282,
+          7.509
+        ],
+        "bboxCenter": [
+          -32.094,
+          3.614
+        ]
+      },
+      "photo": "public/reference/changan-south/phase3-2026-21.jpg",
+      "recognitionPixel": [
+        235,
+        390
+      ],
+      "observation": "western central connecting volume / two flanking wings; identification region, not a ground control point"
+    },
+    {
+      "label": "B",
+      "name": "海天苑1号组群",
+      "osm": "relation/14477263",
+      "sceneBounds": {
+        "x": [
+          -48.017,
+          -37.196
+        ],
+        "z": [
+          9.246,
+          25.608
+        ],
+        "bboxCenter": [
+          -42.606,
+          17.427
+        ]
+      },
+      "photo": "public/reference/changan-south/phase3-2026-21.jpg",
+      "recognitionPixel": [
+        1160,
+        170
+      ],
+      "observation": "four successive old east-west wings / green roof areas behind new building; w1087520421, w1087520423(two wings), w1087520422"
+    },
+    {
+      "label": "C",
+      "name": "海天苑2号组群",
+      "osm": "relation/14477260",
+      "sceneBounds": {
+        "x": [
+          -37.341,
+          -27.889
+        ],
+        "z": [
+          28.332,
+          46.89
+        ],
+        "bboxCenter": [
+          -32.615,
+          37.611
+        ]
+      },
+      "photo": "public/reference/changan-south/phase3-2026-21.jpg",
+      "recognitionPixel": [
+        650,
+        67
+      ],
+      "observation": "farther blue-balcony tall part, south of group 1"
+    },
+    {
+      "label": "D",
+      "name": "启翔湖方向",
+      "photo": "public/reference/changan-south/phase3-2026-21.jpg",
+      "recognitionPixel": [
+        85,
+        80
+      ],
+      "observation": "lake in left distance consistent with southeast direction; not a precise shore control point"
+    }
+  ],
+  "imageOrientation": "handover image approximately looks south; left is east, exact camera heading not calibrated",
+  "method": "Trace known OSM neighboring group footprints in existing projection; identify east international dormitory and south four-wing group 1 from handover photo; cross-check both neighbor groups in 2022 feasibility rendering; retain approximate location envelope. No homography fit across roof heights.",
+  "sources": [
+    {
+      "page": "https://jijian.nwpu.edu.cn/info/1059/8633.htm",
+      "date": "2026-09-04",
+      "role": "handover, identity and current aerial"
+    },
+    {
+      "page": "https://fazhan.nwpu.edu.cn/info/1321/6031.htm",
+      "date": "2022-09-30",
+      "image": "https://fazhan.nwpu.edu.cn/__local/3/C9/99/941E9AA452A072EFA31199F494B_616ADBFC_23AA7.jpg",
+      "fetchedVia": "https://peixun.nwpu.edu.cn/__local/3/C9/99/941E9AA452A072EFA31199F494B_616ADBFC_23AA7.jpg",
+      "file": "public/reference/changan-south/phase3-location-2022-feasibility.jpg",
+      "role": "design-stage exterior/neighbor topology; not surveyed as-built"
+    },
+    {
+      "page": "https://jijian.nwpu.edu.cn/info/1059/6453.htm",
+      "date": "2025-05-27",
+      "role": "construction status and exterior design"
+    }
+  ],
+  "phase4OrientationSupplement": {
+    "mainWings": "approximately east-west, four bars arranged north-south",
+    "evidence": "phase4-2026-22 render front translucent volume is group 2 west connecting spine; old long wings extend lower-left, new long wings extend upper-right and are parallel; handover photo of group 3 and phase4 topping aerial agree with relative north-south sequence",
+    "metricFootprint": "not established"
+  },
+  "evidenceBoard": "research/phase3-location-evidence-board.jpg",
+  "notes": "research/phase3-location-notes.md"
+}

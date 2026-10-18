@@ -1,0 +1,14 @@
+{
+  "buildingCount": 385,
+  "duplicatePolygonSignatures": [],
+  "buildingPartIds": [],
+  "retainedRelationMemberWays": [],
+  "centroidsOutsideCampus": [],
+  "areaDistribution": {
+    "100to1000m2": 190,
+    "over1000m2": 35,
+    "10to100m2": 125,
+    "under10m2": 35
+  },
+  "innerFootballPitchInsideTrack": true
+}

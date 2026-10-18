@@ -1,0 +1,19 @@
+{
+  "unsupportedBuildings": [
+    {
+      "id": "693572365",
+      "name": "南山苑",
+      "outside_m2": 7618.2,
+      "outside_percent": 100.0
+    },
+    {
+      "id": "1553568695",
+      "name": "机电楼",
+      "outside_m2": 1761.6,
+      "outside_percent": 100.0
+    }
+  ],
+  "groundTop": -0.05,
+  "buildingBase": 0.18,
+  "floatingGapMetres": 2.3
+}

@@ -1,0 +1,330 @@
+{
+  "auditDate": "2026-10-18",
+  "projection": {
+    "originLon": 108.7601,
+    "originLat": 34.0298,
+    "x": "(lon-108.7601)*92290/10",
+    "z": "-(lat-34.0298)*111320/10",
+    "unit": "approximately 10 metres"
+  },
+  "notSurveyed": true,
+  "scope": "Public-source neighbourhood cross-check with explicitly approximate 2026 reconstruction",
+  "grounds": [
+    {
+      "id": "reference-haitian-sports",
+      "name": "海天苑运动场",
+      "kind": "multi-court",
+      "center": [
+        -37.587,
+        51.397
+      ],
+      "candidateRegion": [
+        [
+          -47.936,
+          46.441
+        ],
+        [
+          -27.341,
+          46.578
+        ],
+        [
+          -27.238,
+          56.353
+        ],
+        [
+          -47.832,
+          56.216
+        ]
+      ],
+      "imagePixels": [
+        [
+          185,
+          806
+        ],
+        [
+          275,
+          806
+        ],
+        [
+          275,
+          849
+        ],
+        [
+          185,
+          849
+        ]
+      ],
+      "referenceImage": "public/reference/nwpu-changan-official-map-preview.jpg",
+      "confidence": {
+        "existence": "high",
+        "neighbourhood": "medium-high",
+        "currentBoundary": "low",
+        "courtCount": "unknown",
+        "surveyedArea": "unknown"
+      },
+      "sources": [
+        "https://www.nwpu.edu.cn/info/1047/1051.htm",
+        "https://npuinternationalcollege.nwpu.edu.cn/__local/E/6E/25/5F37628D7D0C7315914F51E5518_4F623DF5_1F4A3A2.pdf",
+        "https://ruanjian.nwpu.edu.cn/info/1040/14876.htm"
+      ],
+      "confirmedVisuals": [
+        "blue basketball surface",
+        "green hoops",
+        "dark perimeter fencing",
+        "floodlight poles"
+      ],
+      "neighbours": {
+        "north": "海天苑2号宿舍组群",
+        "south": "航空宇航支撑学科创新中心",
+        "west": "校园西侧道路",
+        "east": "南北向校园道路"
+      },
+      "implementationNote": "Approximate parcel envelope only. Inset and reconcile north edge with existing OSM road before rendering. Do not assign the envelope area as real ground area. Do not add an oval running track or assert current court count."
+    }
+  ],
+  "existingComplexes": [
+    {
+      "osmId": "relation/14477260",
+      "name": "海天苑学生宿舍2号楼",
+      "memberCount": 13,
+      "memberMeaning": "connected wings and narrow connectors, not 13 independent dorm buildings",
+      "geometryRecommendation": "union touching outer polygons; preserve holes; one complex label; no forced A/B/C numbering by member index"
+    },
+    {
+      "osmId": "relation/14477263",
+      "name": "海天苑学生宿舍1号楼",
+      "memberCount": 3,
+      "geometryRecommendation": "retain three disjoint bodies under one complex id; do not call components 1号/2号/3号"
+    }
+  ],
+  "existingFacilities": [
+    {
+      "osmId": "way/1087520424",
+      "name": "海天苑餐厅",
+      "center": [
+        -31.33,
+        19.22
+      ],
+      "extension": {
+        "name": "海天苑美食广场",
+        "relativePosition": "north of restaurant, former green strip",
+        "opened": "2024-11-15",
+        "additionalSeats": 412,
+        "points": [
+          [
+            -35.35,
+            13.9
+          ],
+          [
+            -26.75,
+            14.18
+          ],
+          [
+            -26.79,
+            15.4
+          ],
+          [
+            -35.39,
+            15.12
+          ],
+          [
+            -35.35,
+            13.9
+          ]
+        ],
+        "source": "https://houqin.nwpu.edu.cn/info/1011/230241.htm",
+        "implementationNote": "Confirmed north green strip. Approximate footprint keeps existing OSM circulation; exact setback and post-2024 road alignment remain unverified."
+      }
+    },
+    {
+      "osmId": "way/1087520425",
+      "name": "艺术教育中心（海天苑活动中心）",
+      "center": [
+        -31.04,
+        24.19
+      ],
+      "geometryRecommendation": "rename/alias existing volume; do not add duplicate building",
+      "source": "official 2025 guide map label 5"
+    }
+  ],
+  "newBuildings": [
+    {
+      "id": "haitian-phase3-block4",
+      "name": "海天苑4号楼（三期）",
+      "status": "occupied",
+      "occupiedSince": "2026-08-21",
+      "levelsAboveGround": 6,
+      "levelsBelowGround": 1,
+      "floorAreaM2": 22757.88,
+      "rooms": 523,
+      "beds": 2079,
+      "center": [
+        -44.0,
+        3.8
+      ],
+      "points": [
+        [
+          -39.2,
+          0.2
+        ],
+        [
+          -48.8,
+          0.2
+        ],
+        [
+          -48.8,
+          1.8
+        ],
+        [
+          -48.8,
+          5.8
+        ],
+        [
+          -48.8,
+          7.4
+        ],
+        [
+          -39.2,
+          7.4
+        ],
+        [
+          -39.2,
+          5.8
+        ],
+        [
+          -39.2,
+          1.8
+        ],
+        [
+          -39.2,
+          0.2
+        ]
+      ],
+      "placementConfidence": "neighbour relationships cross-checked; footprint approximate, not surveyed",
+      "appearance": "two long parallel light-coloured wings, blue vertical accents and balcony panels, lower connecting volumes enclosing courtyard",
+      "evidenceImages": [
+        "public/reference/changan-south/phase3-2026-19.jpg",
+        "public/reference/changan-south/phase3-2026-21.jpg",
+        "public/reference/changan-south/phase3-2026-22.jpg"
+      ],
+      "source": "https://jijian.nwpu.edu.cn/info/1059/8633.htm",
+      "implementationNote": "位于1号楼北侧、留学生公寓西侧；相邻关系经图像核对，占地轮廓与立面按照片近似复原。",
+      "renderedBuildingId": "official-haitian-block4"
+    },
+    {
+      "id": "haitian-phase4",
+      "name": "海天苑学生宿舍（四期）",
+      "status": "under-construction",
+      "toppedOut": "2026-08-18",
+      "plannedCompletion": "2027-12",
+      "floorAreaM2": 55120,
+      "beds": 4170,
+      "relativePosition": "west of phase2 on former farm",
+      "center": [
+        -44.164,
+        37.225
+      ],
+      "points": [
+        [
+          -48.65,
+          28.4
+        ],
+        [
+          -48.65,
+          30.15
+        ],
+        [
+          -48.65,
+          33.7
+        ],
+        [
+          -48.65,
+          35.45
+        ],
+        [
+          -48.65,
+          39.0
+        ],
+        [
+          -48.65,
+          40.75
+        ],
+        [
+          -48.65,
+          44.3
+        ],
+        [
+          -48.65,
+          46.05
+        ],
+        [
+          -39.0,
+          46.05
+        ],
+        [
+          -39.0,
+          44.3
+        ],
+        [
+          -39.0,
+          40.75
+        ],
+        [
+          -39.0,
+          39.0
+        ],
+        [
+          -39.0,
+          35.45
+        ],
+        [
+          -39.0,
+          33.7
+        ],
+        [
+          -39.0,
+          30.15
+        ],
+        [
+          -39.0,
+          28.4
+        ],
+        [
+          -48.65,
+          28.4
+        ]
+      ],
+      "placementConfidence": "neighbour relationships cross-checked; footprint approximate, not surveyed",
+      "appearanceReference": "four parallel long wings with connecting volumes; design rendering not as-built",
+      "source": "https://jijian.nwpu.edu.cn/info/1059/8543.htm",
+      "scheduleSource": "https://jijian.nwpu.edu.cn/info/1052/7873.htm",
+      "implementationNote": "二期西侧原农场地块；四条主楼翼东西向、沿南北排列。占地边线与施工设施位置为近似示意。",
+      "renderedBuildingId": "official-haitian-phase4"
+    }
+  ],
+  "unresolved": [
+    {
+      "osmId": "way/1087520407",
+      "name": "旧OSM海天宿舍西侧球场",
+      "currentUse": "unknown",
+      "note": "2022 geometry alone does not establish current 2026 sports complex or phase3 placement"
+    },
+    {
+      "subject": "海天苑运动场面积",
+      "value": null,
+      "note": "No verified current surveyed area. University budget >=20000 m2 applies to whole infrastructure program, not this ground."
+    }
+  ],
+  "mapFreshness": {
+    "rawOsmBbox": [
+      108.752,
+      34.019,
+      108.767,
+      34.045
+    ],
+    "haitianRelationsTimestamp": "2022-08-19",
+    "late2025GuideIsUpdatedAsBuilt": false,
+    "note": "Late2025 guide retains same illustrated Chang’an map and omits phase3/phase4, so it cannot establish 2026 completed footprint layout."
+  },
+  "followupEvidence": "research/phase3-location-notes.md"
+}
